@@ -4,9 +4,10 @@ parameters:
         - src
         - config
         - database
-        - tests
+        - tests/TestModel.php
+        - tests/Support
     excludePaths:
-        # Pest spec files use higher-order expectation chains that PHPStan
-        # cannot resolve; the package code they exercise is fully analysed.
-        - tests/*Test.php
+        # Consumer-facing opt-in trait; it is only used from test cases (which
+        # are not analysed) and host applications, so it has no static caller here.
+        - src/Testing/InteractsWithAddresses.php
     checkModelProperties: true
