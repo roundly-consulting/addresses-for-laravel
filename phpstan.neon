@@ -1,0 +1,12 @@
+parameters:
+    level: 7
+    paths:
+        - src
+        - config
+        - database
+        - tests
+    excludePaths:
+        # Pest spec files use higher-order expectation chains that PHPStan
+        # cannot resolve; the package code they exercise is fully analysed.
+        - tests/*Test.php
+    checkModelProperties: true
