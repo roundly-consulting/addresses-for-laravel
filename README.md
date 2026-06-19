@@ -2,7 +2,8 @@
 
 Store billing, shipping, or other addresses on any Eloquent model via a polymorphic
 relationship. Add the `HasAddresses` trait to a model and attach as many typed addresses as
-you need, with optional primary-address handling and a flexible `meta` payload.
+you need, with a fluent builder, a typed `AddressType` enum, primary-address handling, ISO
+country normalisation, query scopes, events, an API resource, and test helpers.
 
 ## Requirements
 
@@ -32,23 +33,28 @@ php artisan vendor:publish --tag="addresses-config"
 
 ## Configuration
 
-The published config file (`config/addresses.php`) exposes a single key:
+The published config file (`config/addresses.php`):
 
 ```php
 use RoundlyConsulting\Addresses\Address;
+use RoundlyConsulting\Addresses\Enums\AddressType;
 
 return [
-
-    // The Eloquent model used to store addresses. Override with your own class
-    // (extending the package model) to add custom behaviour.
     'model' => Address::class,
-
+    'default_type' => AddressType::Default->value,
+    'normalise_country' => true,
+    'country_resolver' => null,
+    'facade_alias' => 'Addresses',
 ];
 ```
 
-| Key     | Type           | Default           | Purpose                                                                 |
-|---------|----------------|-------------------|-------------------------------------------------------------------------|
-| `model` | `class-string` | `Address::class`  | The model the `HasAddresses` trait reads and writes through. Swap it for a subclass to customise behaviour. |
+| Key                 | Type                  | Default              | Purpose                                                                                              |
+|---------------------|-----------------------|----------------------|------------------------------------------------------------------------------------------------------|
+| `model`             | `class-string`        | `Address::class`     | The model the trait/facade read and write through. Swap it for a subclass to customise behaviour.    |
+| `default_type`      | `string`              | `'default'`          | The `AddressType` used when none is supplied.                                                         |
+| `normalise_country` | `bool`                | `true`               | Trim, upper-case, and validate country codes as ISO 3166-1 alpha-2/alpha-3 on the way in.             |
+| `country_resolver`  | `class-string\|null`  | `null`               | Optional host implementation of `CountryResolver` used to resolve country names (and geocode).        |
+| `facade_alias`      | `string\|null`        | `'Addresses'`        | The class alias registered for the facade. Set to `null` to skip registering a global alias.          |
 
 ## Usage
 
@@ -64,55 +70,166 @@ class Payer extends Model
 }
 ```
 
-### Create an address
+### Address types
+
+`type` is a backed enum, `RoundlyConsulting\Addresses\Enums\AddressType`, with the cases
+`Default`, `Billing`, `Shipping`, `Home`, `Work`, and `Office`. Each case has a `label()`
+for UI. Address types are enum-only across the whole public API.
 
 ```php
-$payer = Payer::create(['name' => 'John Doe']);
+use RoundlyConsulting\Addresses\Enums\AddressType;
 
-$payer->createAddress(
-    city: 'Pretty',
-    street: 'Somewhere 1',
-    postalCode: '123456',
-    countryIsoCode: 'SK',
-    name: 'My Office',
-    isPrimary: true,
-    type: 'office',
-    meta: collect([
-        'custom_data' => 'OK',
-    ]),
-);
+AddressType::Office->value;   // 'office'
+AddressType::Office->label(); // 'Office'
 ```
+
+### Create an address — fluent builder
+
+The facade and the `newAddress()` model helper return a fluent `PendingAddress` builder.
+Country codes are normalised automatically:
+
+```php
+use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Facades\Addresses;
+
+Addresses::for($payer)
+    ->type(AddressType::Office)
+    ->name('HQ')
+    ->primary()
+    ->in('Bratislava')->at('Somewhere 1')->postalCode('81101')->country('sk')
+    ->meta(['floor' => 3])
+    ->save();
+
+// or from the model
+$payer->newAddress()
+    ->type(AddressType::Home)
+    ->in('Košice')->at('Main 2')->postalCode('04001')->country('SK')
+    ->save();
+```
+
+Calling `save()` without `in()`, `at()`, `postalCode()`, and `country()` throws
+`IncompleteAddressException`.
+
+### Create an address — DTO / programmatic
+
+```php
+use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
+use RoundlyConsulting\Addresses\Enums\AddressType;
+
+$payer->addAddress(AddressData::make(
+    city: 'Bratislava',
+    street: 'Somewhere 1',
+    postalCode: '81101',
+    countryIso: 'SK',
+    type: AddressType::Office,
+    isPrimary: true,
+));
+```
+
+The legacy `createAddress(...)` method is still available (with an enum `type` argument).
 
 `meta` is stored as JSON and cast back to an `Illuminate\Support\Collection`.
 
 ### Read addresses
 
 ```php
-// All addresses (Eloquent collection)
-$payer->addresses;
+use RoundlyConsulting\Addresses\Enums\AddressType;
 
-// First address of a given type
-$payer->getAddressOfType(type: 'home');
+$payer->addresses;                                   // all addresses
+$payer->getAddressOfType(AddressType::Home);         // first of a type
+$payer->getPrimaryAddressOfType(AddressType::Office); // first primary of a type (or null)
+$payer->primaryAddress();                            // primary across all types
+$payer->primaryAddress(AddressType::Office);         // primary of a type
+$payer->addressesOfType(AddressType::Shipping);      // collection of a type
+$payer->hasAddresses();                              // bool
+```
 
-// First *primary* address of a given type (or null)
-$payer->getPrimaryAddressOfType(type: 'office');
+### Query scopes
+
+```php
+use RoundlyConsulting\Addresses\Address;
+use RoundlyConsulting\Addresses\Enums\AddressType;
+
+Address::query()->primary()->get();
+Address::query()->ofType(AddressType::Billing)->get();
+Address::query()->inCountry('SK')->get();
 ```
 
 ### Manage the primary address
 
-Each address can be promoted to primary for its owner + type. Promoting one demotes the
-others in the same group:
+Promoting one address demotes the others in the same owner + type group:
 
 ```php
-$address = $payer->getAddressOfType('office');
+$address = $payer->getAddressOfType(AddressType::Office);
 
-$address->markAsPrimary();        // promote this address, demote siblings
+$address->markAsPrimary();        // promote this, demote siblings
 $address->markAsPrimary(false);   // demote every office address for this owner
+
+// owner-guarded helper (rejects addresses owned by another model)
+$payer->setPrimaryAddress($address);
+```
+
+### Format an address
+
+```php
+$payer->primaryAddress()?->formatted();
+// "HQ, Somewhere 1, 81101 Bratislava, SK"
+
+$address->formatted(' | '); // custom separator; empty parts are skipped
+```
+
+### Country names (optional resolver)
+
+The package validates and normalises ISO country codes but ships no country-name list or
+geocoder. To resolve names (or coordinates), implement `CountryResolver` in your app and
+register it in config:
+
+```php
+use RoundlyConsulting\Addresses\Contracts\CountryResolver;
+use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
+use RoundlyConsulting\Addresses\DataTransferObjects\Coordinates;
+
+class AppCountryResolver implements CountryResolver
+{
+    public function name(string $iso): ?string { /* ... */ }
+    public function coordinates(AddressData $data): ?Coordinates { /* ... */ }
+}
+```
+
+```php
+// config/addresses.php
+'country_resolver' => \App\Support\AppCountryResolver::class,
+```
+
+With a resolver bound, `$address->country_name` returns the resolved name; without one it is
+`null`.
+
+### Events
+
+The package dispatches:
+
+- `AddressCreated` — after an address is created
+- `AddressUpdated` — after an address is updated through `UpdateAddressAction`
+- `AddressDeleted` — after an address is deleted
+- `PrimaryAddressChanged` — when an address is promoted to primary
+
+Each event exposes the related `$address`.
+
+### API resource
+
+`RoundlyConsulting\Addresses\Http\Resources\AddressResource` renders an address with a
+stable shape (id, type, name, lines, country ISO/name, `is_primary`, `formatted`, meta,
+timestamps):
+
+```php
+use RoundlyConsulting\Addresses\Http\Resources\AddressResource;
+
+return AddressResource::collection($payer->addresses);
 ```
 
 ### Use a custom model
 
-Point the config at your own subclass to extend behaviour:
+Point the config at your own subclass:
 
 ```php
 namespace App\Models;
@@ -121,7 +238,7 @@ use RoundlyConsulting\Addresses\Address as BaseAddress;
 
 class Address extends BaseAddress
 {
-    // ...
+    protected $table = 'addresses';
 }
 ```
 
@@ -131,6 +248,20 @@ class Address extends BaseAddress
 ```
 
 ## Testing
+
+The `InteractsWithAddresses` trait adds expressive assertions to your tests:
+
+```php
+use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Testing\InteractsWithAddresses;
+
+uses(InteractsWithAddresses::class);
+
+$this->assertHasAddress($payer, ['city' => 'Bratislava']);
+$this->assertPrimaryAddress($payer, AddressType::Office);
+```
+
+Run the package test suite with:
 
 ```bash
 composer test
