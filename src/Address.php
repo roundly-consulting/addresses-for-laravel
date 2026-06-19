@@ -4,25 +4,31 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Database\Factories\AddressFactory;
+use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Events\AddressDeleted;
+use RoundlyConsulting\Addresses\Events\PrimaryAddressChanged;
 
 /**
  * @property int $id
  * @property string $addressable_type
  * @property int $addressable_id
  * @property bool $is_primary
- * @property string $type
+ * @property AddressType $type
  * @property string|null $name
  * @property string|null $city
  * @property string|null $street
  * @property string|null $postal_code
  * @property string|null $country_iso
+ * @property string|null $country_name
  * @property Collection<array-key, mixed>|null $meta
  * @property Carbon|null $created_at
  * @property Carbon|null $updated_at
@@ -49,7 +55,15 @@ class Address extends Model
         return [
             'meta' => 'collection',
             'is_primary' => 'bool',
+            'type' => AddressType::class,
         ];
+    }
+
+    protected static function booted(): void
+    {
+        static::deleted(function (Address $address): void {
+            AddressDeleted::dispatch($address);
+        });
     }
 
     protected static function newFactory(): AddressFactory
@@ -66,6 +80,73 @@ class Address extends Model
     }
 
     /**
+     * @param  Builder<Address>  $query
+     */
+    public function scopePrimary(Builder $query): void
+    {
+        $query->where('is_primary', true);
+    }
+
+    /**
+     * @param  Builder<Address>  $query
+     */
+    public function scopeOfType(Builder $query, AddressType $type): void
+    {
+        $query->where('type', $type->value);
+    }
+
+    /**
+     * @param  Builder<Address>  $query
+     */
+    public function scopeInCountry(Builder $query, string $iso): void
+    {
+        $query->where('country_iso', strtoupper(trim($iso)));
+    }
+
+    /**
+     * The resolved country name, deferring to a bound CountryResolver if one
+     * exists; otherwise null.
+     */
+    public function countryName(): ?string
+    {
+        if ($this->country_iso === null) {
+            return null;
+        }
+
+        if (! app()->bound(CountryResolver::class)) {
+            return null;
+        }
+
+        return app(CountryResolver::class)->name($this->country_iso);
+    }
+
+    public function getCountryNameAttribute(): ?string
+    {
+        return $this->countryName();
+    }
+
+    /**
+     * A single-line label built from the populated address lines, skipping any
+     * empty parts.
+     */
+    public function formatted(string $separator = ', '): string
+    {
+        $postalAndCity = trim(implode(' ', array_filter([
+            $this->postal_code,
+            $this->city,
+        ], fn (?string $part): bool => $part !== null && trim($part) !== '')));
+
+        $parts = array_filter([
+            $this->name,
+            $this->street,
+            $postalAndCity === '' ? null : $postalAndCity,
+            $this->country_iso,
+        ], fn (?string $part): bool => $part !== null && trim($part) !== '');
+
+        return implode($separator, $parts);
+    }
+
+    /**
      * Mark this address as the primary one for its addressable + type, demoting
      * any siblings. Passing false simply demotes every address in the group.
      */
@@ -75,11 +156,13 @@ class Address extends Model
             ->when($isPrimary, fn ($query) => $query->where('id', '!=', $this->id))
             ->where('addressable_type', $this->addressable_type)
             ->where('addressable_id', $this->addressable_id)
-            ->where('type', $this->type)
+            ->where('type', $this->type->value)
             ->update(['is_primary' => false]);
 
         if ($isPrimary && ! $this->is_primary) {
             $this->update(['is_primary' => true]);
+
+            PrimaryAddressChanged::dispatch($this);
         }
     }
 }
