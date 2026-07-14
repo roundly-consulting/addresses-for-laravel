@@ -18,6 +18,14 @@ country normalisation, query scopes, events, an API resource, and test helpers.
 - PHP 8.4+
 - Laravel 12 or 13
 
+### Integrates with
+
+- [`package-toolkit-for-laravel`](https://github.com/roundly-consulting/package-toolkit-for-laravel) —
+  the package is bootstrapped with the toolkit's `PackageServiceProvider`, so its config, the
+  publishable migration and the facade alias are wired through the shared builder, the configured
+  model is resolved through the toolkit's `ModelResolver`, and `php artisan about` reports the
+  addresses setup.
+
 ## Installation
 
 Install the package via Composer:
