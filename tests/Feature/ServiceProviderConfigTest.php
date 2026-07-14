@@ -60,7 +60,16 @@ it('publishes the config and a timestamped migration under the package tags', fu
 
     expect(array_keys($config)[0])->toEndWith('config/addresses.php')
         ->and(array_values($config)[0])->toEndWith('config/addresses.php')
+        ->and($migrations)->toHaveCount(1)
         ->and(array_keys($migrations)[0])->toEndWith('database/migrations/create_addresses_table.php')
+        ->and(array_values($migrations)[0])->toStartWith(database_path('migrations/'))
         ->and(basename((string) array_values($migrations)[0]))
         ->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_create_addresses_table\.php$/');
+});
+
+it('does not auto-load the migration', function () {
+    bootAddressesProvider();
+
+    expect(app('migrator')->paths())
+        ->not->toContain(realpath(__DIR__.'/../../database/migrations'));
 });

@@ -17,16 +17,7 @@ final class AddressesServiceProvider extends PackageServiceProvider
         $package
             ->name('addresses')
             ->hasConfigFile()
-            // The migration is both auto-loaded (a plain `php artisan migrate`
-            // creates the table) and publishable under a host-stamped filename.
-            // The toolkit's hasMigration() only publishes a `.php.stub` — it does
-            // not load — so the publish half uses the generic stub escape hatch
-            // and boot() keeps loading the directory.
-            ->publishesStubs(
-                __DIR__.'/../database/migrations/create_addresses_table.php',
-                self::publishedMigrationPath(),
-                'addresses-migrations',
-            )
+            ->hasMigrations()
             ->hasFacadeAlias(Addresses::class, 'addresses.facade_alias')
             ->contributesToAbout(static fn (): array => [
                 // The resolver is a host class name, so only its base name shows;
@@ -49,13 +40,6 @@ final class AddressesServiceProvider extends PackageServiceProvider
         $this->registerCountryResolver();
     }
 
-    public function boot(): void
-    {
-        parent::boot();
-
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
-    }
-
     /**
      * Bind a host-provided CountryResolver only when one is configured. The
      * package never ships a default that touches the network.
@@ -70,11 +54,6 @@ final class AddressesServiceProvider extends PackageServiceProvider
 
         /** @var class-string<CountryResolver> $resolver */
         $this->app->singleton(CountryResolver::class, $resolver);
-    }
-
-    private static function publishedMigrationPath(): string
-    {
-        return database_path('migrations/'.date('Y_m_d_His').'_create_addresses_table.php');
     }
 
     private static function defaultType(): string
