@@ -34,7 +34,8 @@ Install the package via Composer:
 composer require roundly-consulting/addresses-for-laravel
 ```
 
-Publish and run the migration:
+Publish and run the migration. The migration is **not** loaded automatically — publishing it is
+required, and the published copy is yours to edit:
 
 ```bash
 php artisan vendor:publish --tag="addresses-migrations"
