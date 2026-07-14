@@ -14,6 +14,7 @@ use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
 use RoundlyConsulting\Addresses\PendingAddress;
+use RoundlyConsulting\Addresses\Support\AddressModel;
 
 /**
  * @mixin Model
@@ -25,10 +26,7 @@ trait HasAddresses
      */
     public function addresses(): MorphMany
     {
-        /** @var class-string<Address> $model */
-        $model = config('addresses.model', Address::class);
-
-        return $this->morphMany($model, 'addressable');
+        return $this->morphMany(AddressModel::class(), 'addressable');
     }
 
     public function getAddressOfType(AddressType $type, bool $onlyPrimary = false): ?Address

@@ -8,13 +8,14 @@ use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Events\AddressCreated;
+use RoundlyConsulting\Addresses\Support\AddressModel;
 
 final class CreateAddressAction
 {
     public function execute(Model $addressable, AddressData $data): Address
     {
         /** @var Address $address */
-        $address = $addressable->morphMany($this->model(), 'addressable')
+        $address = $addressable->morphMany(AddressModel::class(), 'addressable')
             ->create($data->toAttributes());
 
         if ($data->isPrimary) {
@@ -25,16 +26,5 @@ final class CreateAddressAction
         AddressCreated::dispatch($address);
 
         return $address;
-    }
-
-    /**
-     * @return class-string<Address>
-     */
-    private function model(): string
-    {
-        /** @var class-string<Address> $model */
-        $model = config('addresses.model', Address::class);
-
-        return $model;
     }
 }

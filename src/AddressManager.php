@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Support\AddressModel;
 
 class AddressManager
 {
@@ -47,8 +48,7 @@ class AddressManager
      */
     private function query(Model $addressable): Builder
     {
-        /** @var class-string<Address> $model */
-        $model = config('addresses.model', Address::class);
+        $model = AddressModel::class();
 
         return $model::query()
             ->whereMorphedTo('addressable', $addressable);
