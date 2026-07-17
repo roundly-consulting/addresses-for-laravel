@@ -41,13 +41,10 @@ it('creates address for entity', function () {
         ->meta->toBeInstanceOf(Collection::class)
         ->meta->get('custom_data')->toBe('OK');
 
-    // `meta` is deliberately absent from this array. assertDatabaseHas compiles an equality
-    // predicate per column, and Postgres' `json` type has no `=` operator ("operator does
-    // not exist: json = unknown"), so including it made this assertion structurally
-    // incapable of running on a real engine — it passed only because SQLite compares the
-    // column as text. The stored payload is already asserted above, through the model's
-    // cast, and round-tripped against whatever engine the leg configured in
-    // Feature/MigrationOrderTest.php.
+    // `meta` can be compared in SQL again now that the column is `jsonb`: Postgres has no
+    // `=` operator for `json` ("operator does not exist: json = unknown") but does have one
+    // for `jsonb`, so this predicate runs on every engine rather than passing only on
+    // SQLite's text comparison.
     $this->assertDatabaseHas('addresses', [
         'addressable_id' => $entity->id,
         'addressable_type' => TestModel::class,
@@ -58,6 +55,7 @@ it('creates address for entity', function () {
         'street' => 'Somewhere 1',
         'postal_code' => '123456',
         'country_iso' => 'SK',
+        'meta' => $this->castAsJson(['custom_data' => 'OK']),
     ]);
 });
 
