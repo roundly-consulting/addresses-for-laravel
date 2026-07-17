@@ -17,8 +17,7 @@ ArchPresets::strictTypes('RoundlyConsulting\Addresses');
  * host to subclass (pinned by the preset below instead), and AddressesException, the base
  * every addresses error extends so a host can catch them uniformly.
  */
-ArchPresets::finalByDefault('RoundlyConsulting\Addresses')
-    ->ignoring([Address::class, AddressesException::class]);
+ArchPresets::finalByDefault('RoundlyConsulting\Addresses', [Address::class, AddressesException::class]);
 
 /**
  * The counter-weight, and the fleet's 7×-shipped fatal: `final` on a config-swappable
