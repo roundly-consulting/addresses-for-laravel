@@ -15,7 +15,7 @@ use RoundlyConsulting\Addresses\Exceptions\IncompleteAddressException;
  * Fluent builder produced by Addresses::for() and $model->newAddress(). It
  * accumulates fields and persists through CreateAddressAction on save().
  */
-class PendingAddress
+final class PendingAddress
 {
     private ?string $city = null;
 

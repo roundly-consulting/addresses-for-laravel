@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Support\AddressModel;
 
-class AddressManager
+final class AddressManager
 {
     /**
      * Start a fluent address builder for the given addressable model.
