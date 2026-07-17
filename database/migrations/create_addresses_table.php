@@ -20,7 +20,7 @@ return new class extends Migration
             $table->string('street')->nullable();
             $table->string('postal_code')->nullable();
             $table->string('country_iso')->nullable();
-            $table->json('meta')->nullable();
+            $table->jsonb('meta')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });
