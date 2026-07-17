@@ -10,4 +10,6 @@ parameters:
         # Consumer-facing opt-in trait; it is only used from test cases (which
         # are not analysed) and host applications, so it has no static caller here.
         - src/Testing/InteractsWithAddresses.php
+    configDirectories:
+        - config
     checkModelProperties: true

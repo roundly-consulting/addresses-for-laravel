@@ -7,11 +7,14 @@ namespace RoundlyConsulting\Addresses;
 use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Facades\Addresses;
 use RoundlyConsulting\Addresses\Support\AddressModel;
+use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
 
 final class AddressesServiceProvider extends PackageServiceProvider
 {
+    use RegistersBlueprintMacros;
+
     public function configurePackage(Package $package): void
     {
         $package
@@ -38,6 +41,15 @@ final class AddressesServiceProvider extends PackageServiceProvider
         $this->app->singleton(AddressManager::class, fn (): AddressManager => new AddressManager);
 
         $this->registerCountryResolver();
+    }
+
+    public function boot(): void
+    {
+        parent::boot();
+
+        // The migration's key-type-aware morph column is a macro, so it must exist
+        // before a host runs `php artisan migrate`.
+        $this->registerBlueprintMacros();
     }
 
     /**

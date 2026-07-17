@@ -15,14 +15,17 @@ declare(strict_types=1);
  *    optional, defaults to null, and the package bundles no implementation.
  */
 it('ships exactly the config keys it reads', function (): void {
-    expect(__DIR__.'/../../config/addresses.php')->toSatisfyConfigContract(__DIR__.'/../../src', [
+    expect(__DIR__.'/../../config/addresses.php')->toSatisfyConfigContract([__DIR__.'/../../src', __DIR__.'/../../database'], [
         // Two real reads reach a key without ever writing a `config(` token, so the prefix
         // is what makes them visible to the scraper:
         //   - `addresses.model` goes through the toolkit's
         //     `ModelResolver::for('addresses.model', …)` seam;
         //   - `addresses.facade_alias` is passed to the toolkit's
-        //     `hasFacadeAlias(Addresses::class, 'addresses.facade_alias')` as a literal.
-        // Both drive real behaviour; neither is a `config()` call.
+        //     `hasFacadeAlias(Addresses::class, 'addresses.facade_alias')` as a literal;
+        //   - `addresses.key_type` is read through `KeyType::fromConfig('addresses.key_type')`
+        //     in the migration (hence `database` in the scanned dirs) — it decides the
+        //     shipped morph column type.
+        // All drive real behaviour; none is a `config()` call.
         'extraReadPrefixes' => ['addresses.'],
 
         // Deliberately NO `excludeFromReverse` for the provider. The testing README's own

@@ -5,14 +5,17 @@ declare(strict_types=1);
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\PackageToolkit\Enums\KeyType;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('addresses', function (Blueprint $table): void {
+        $keyType = KeyType::fromConfig('addresses.key_type');
+
+        Schema::create('addresses', function (Blueprint $table) use ($keyType): void {
             $table->id();
-            $table->morphs('addressable');
+            $table->morphKey('addressable', $keyType, nullable: false);
             $table->boolean('is_primary')->default(false);
             $table->string('type')->default('default');
             $table->string('name')->nullable();
