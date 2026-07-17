@@ -4,32 +4,47 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses\Tests;
 
-use Illuminate\Contracts\Config\Repository;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Orchestra\Testbench\TestCase as Orchestra;
+use Illuminate\Support\ServiceProvider;
 use RoundlyConsulting\Addresses\AddressesServiceProvider;
+use RoundlyConsulting\Testing\PackageTestCase;
 
-abstract class TestCase extends Orchestra
+abstract class TestCase extends PackageTestCase
 {
     /**
-     * @return array<int, class-string>
+     * Every provider addresses needs, in registration order. A host auto-discovers these;
+     * the suite must list them or the test environment is a fiction. The toolkit ships no
+     * provider of its own — it ships the base this one extends — so addresses' is the one.
+     *
+     * @return list<class-string<ServiceProvider>>
      */
-    protected function getPackageProviders($app): array
+    protected function packageProviders(): array
     {
         return [AddressesServiceProvider::class];
     }
 
-    protected function defineEnvironment($app): void
+    /**
+     * The addresses migration, named by **provider class** rather than by the directory it
+     * happens to sit in: the base case reflects on the provider to find its
+     * `database/migrations`, so a relocated directory can never silently stop being loaded.
+     *
+     * @return list<class-string<ServiceProvider>|string>
+     */
+    protected function migrationSources(): array
     {
-        tap($app->make('config'), function (Repository $config): void {
-            $config->set('database.default', 'testing');
-        });
+        return [AddressesServiceProvider::class];
     }
 
+    /**
+     * The host-owned entity addresses hang off. It is an ad-hoc `Schema::create()` rather
+     * than a migration on purpose: `addressable` is a polymorphic, deliberately
+     * unconstrained morph, so the owner's table is the host's business and nothing here is
+     * shipped schema with an order to pin.
+     */
     protected function defineDatabaseMigrations(): void
     {
-        $this->loadMigrationsFrom(__DIR__.'/../database/migrations');
+        parent::defineDatabaseMigrations();
 
         Schema::create('test_models', function (Blueprint $table): void {
             $table->increments('id');

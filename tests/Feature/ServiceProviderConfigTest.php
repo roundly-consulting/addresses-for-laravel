@@ -52,24 +52,20 @@ it('renames the facade alias when the config names one', function () {
         ->toHaveKey('Locations', Addresses::class);
 });
 
-it('publishes the config and a timestamped migration under the package tags', function () {
+/**
+ * The config half of the publish contract. The migration half — that the provider publishes
+ * its migration timestamped and never auto-loads it — moved to `MigrationOrderTest.php`,
+ * where the `toPublishMigrationsTimestamped` / `toNotAutoLoadMigrations` presets pin the
+ * same two facts with a pinned file count. The hand-rolled versions that used to sit here
+ * were unpinned in one direction: the auto-load check asserted a `realpath()` was absent
+ * from the migrator's paths, which passes just as happily when the directory has been
+ * renamed out from under it.
+ */
+it('publishes the config file under the package tag', function () {
     bootAddressesProvider();
 
     $config = AddressesServiceProvider::pathsToPublish(AddressesServiceProvider::class, 'addresses-config');
-    $migrations = AddressesServiceProvider::pathsToPublish(AddressesServiceProvider::class, 'addresses-migrations');
 
     expect(array_keys($config)[0])->toEndWith('config/addresses.php')
-        ->and(array_values($config)[0])->toEndWith('config/addresses.php')
-        ->and($migrations)->toHaveCount(1)
-        ->and(array_keys($migrations)[0])->toEndWith('database/migrations/create_addresses_table.php')
-        ->and(array_values($migrations)[0])->toStartWith(database_path('migrations/'))
-        ->and(basename((string) array_values($migrations)[0]))
-        ->toMatch('/^\d{4}_\d{2}_\d{2}_\d{6}_create_addresses_table\.php$/');
-});
-
-it('does not auto-load the migration', function () {
-    bootAddressesProvider();
-
-    expect(app('migrator')->paths())
-        ->not->toContain(realpath(__DIR__.'/../../database/migrations'));
+        ->and(array_values($config)[0])->toEndWith('config/addresses.php');
 });
