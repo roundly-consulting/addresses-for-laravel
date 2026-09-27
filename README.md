@@ -153,7 +153,8 @@ $payer->addAddress(AddressData::make(
 ));
 ```
 
-The legacy `createAddress(...)` method is still available (with an enum `type` argument).
+Or pass the fields as named arguments with `createAddress(city: …, street: …, postalCode: …,
+countryIsoCode: …, type: AddressType::Office)`.
 
 `meta` is stored as JSON and cast back to an `Illuminate\Support\Collection`.
 
