@@ -67,10 +67,7 @@
         "laravel": {
             "providers": [
                 "RoundlyConsulting\\Addresses\\AddressesServiceProvider"
-            ],
-            "aliases": {
-                "Addresses": "RoundlyConsulting\\Addresses\\Facades\\Addresses"
-            }
+            ]
         }
     },
     "minimum-stability": "dev",

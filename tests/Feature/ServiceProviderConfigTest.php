@@ -69,3 +69,24 @@ it('publishes the config file under the package tag', function () {
     expect(array_keys($config)[0])->toEndWith('config/addresses.php')
         ->and(array_values($config)[0])->toEndWith('config/addresses.php');
 });
+
+/**
+ * The alias belongs to `addresses.facade_alias` alone. A second declaration in composer.json's
+ * `extra.laravel.aliases` made Laravel's package discovery register `Addresses` whatever the
+ * config said, so `facade_alias => null` could never actually skip it.
+ */
+it('leaves the facade alias to the config, not to package discovery', function () {
+    $composer = json_decode((string) file_get_contents(__DIR__.'/../../composer.json'), true, flags: JSON_THROW_ON_ERROR);
+
+    expect($composer['extra']['laravel'])->not->toHaveKey('aliases')
+        ->and($composer['extra']['laravel']['providers'])->toBe([AddressesServiceProvider::class]);
+});
+
+it('registers no alias at all when the config opts out', function () {
+    AliasLoader::setInstance(null);
+    config()->set('addresses.facade_alias', null);
+
+    bootAddressesProvider();
+
+    expect(AliasLoader::getInstance()->getAliases())->not->toContain(Addresses::class);
+});
