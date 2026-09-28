@@ -98,3 +98,9 @@ it('renders the addresses section without leaking the addresses it stores', func
         ],
     );
 });
+
+it('reads an env-string normalisation switch the way the package applies it', function () {
+    config()->set('addresses.normalise_country', 'false');
+
+    expect(addressesAboutOutput())->toMatch('/Normalise country\W+OFF/');
+});

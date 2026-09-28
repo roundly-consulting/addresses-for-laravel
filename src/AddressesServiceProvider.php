@@ -10,6 +10,7 @@ use RoundlyConsulting\Addresses\Support\AddressModel;
 use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 
 final class AddressesServiceProvider extends PackageServiceProvider
 {
@@ -91,6 +92,6 @@ final class AddressesServiceProvider extends PackageServiceProvider
 
     private static function switch(string $key, bool $default): string
     {
-        return (bool) config($key, $default) ? 'ON' : 'OFF';
+        return Config::boolean($key, $default) ? 'ON' : 'OFF';
     }
 }

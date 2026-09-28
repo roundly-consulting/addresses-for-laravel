@@ -6,7 +6,9 @@ namespace RoundlyConsulting\Addresses\DataTransferObjects;
 
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Exceptions\InvalidCountryException;
 use RoundlyConsulting\Addresses\Support\CountryNormaliser;
+use RoundlyConsulting\PackageToolkit\Support\Config;
 
 final readonly class AddressData
 {
@@ -26,9 +28,11 @@ final readonly class AddressData
 
     /**
      * Named-argument-friendly factory that trims string fields and, when
-     * country normalisation is enabled, normalises the ISO code on the way in.
+     * country normalisation is enabled, normalises the country code on the way in.
      *
      * @param  Collection<array-key, mixed>|null  $meta
+     *
+     * @throws InvalidCountryException when normalisation is on and the code is not two or three letters
      */
     public static function make(
         string $city,
@@ -76,7 +80,7 @@ final readonly class AddressData
 
     private static function resolveCountry(string $countryIso): string
     {
-        if (config('addresses.normalise_country', true) === false) {
+        if (! Config::boolean('addresses.normalise_country', true)) {
             return trim($countryIso);
         }
 

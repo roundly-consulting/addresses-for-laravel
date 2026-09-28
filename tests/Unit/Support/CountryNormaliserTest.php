@@ -21,3 +21,8 @@ it('rejects malformed codes', function (string $value) {
     'single letter' => ['S'],
     'empty' => ['   '],
 ]);
+
+it('checks the shape only: an unassigned code passes and alpha-3 is never mapped to alpha-2', function () {
+    expect(CountryNormaliser::normalise('xx'))->toBe('XX')
+        ->and(CountryNormaliser::normalise('svk'))->not->toBe('SK');
+});

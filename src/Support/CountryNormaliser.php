@@ -7,9 +7,10 @@ namespace RoundlyConsulting\Addresses\Support;
 use RoundlyConsulting\Addresses\Exceptions\InvalidCountryException;
 
 /**
- * Trims, upper-cases, and validates a country code as ISO 3166-1 alpha-2 or
- * alpha-3. Pure string logic — it bundles no country list and makes no network
- * call, keeping the runtime dependency footprint to Laravel/Symfony only.
+ * Trims, upper-cases, and shape-checks a country code: two or three letters, the
+ * shape of ISO 3166-1 alpha-2/alpha-3. Pure string logic — it bundles no country
+ * list and makes no network call — so it does not know whether a code is
+ * assigned (`XX` passes) and never maps alpha-3 onto alpha-2 (`SVK` stays `SVK`).
  */
 final class CountryNormaliser
 {

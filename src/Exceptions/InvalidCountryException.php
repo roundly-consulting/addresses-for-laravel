@@ -9,7 +9,7 @@ final class InvalidCountryException extends AddressesException
     public static function for(string $country): self
     {
         return new self(sprintf(
-            'The value [%s] is not a valid ISO 3166-1 alpha-2 or alpha-3 country code.',
+            'The value [%s] is not a country code: expected two or three letters (ISO 3166-1 alpha-2 or alpha-3).',
             $country,
         ));
     }

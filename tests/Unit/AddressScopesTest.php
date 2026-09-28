@@ -54,3 +54,22 @@ it('scopes by country', function () {
 
     expect(Address::query()->inCountry(' sk ')->count())->toBe(1);
 });
+
+it('matches the verbatim codes stored when normalisation is off, whatever their case', function () {
+    config()->set('addresses.normalise_country', false);
+    $this->entity->createAddress(city: 'c', street: 's', postalCode: '1', countryIsoCode: 'sk');
+    $this->entity->createAddress(city: 'c', street: 's', postalCode: '1', countryIsoCode: 'Sk ');
+    $this->entity->createAddress(city: 'c', street: 's', postalCode: '1', countryIsoCode: 'cz');
+
+    expect(Address::query()->inCountry('sk')->count())->toBe(2)
+        ->and(Address::query()->inCountry(' SK ')->count())->toBe(2)
+        ->and(Address::query()->inCountry('svk')->count())->toBe(0);
+});
+
+it('reads an env-string normalisation switch as a boolean', function (string $off) {
+    config()->set('addresses.normalise_country', $off);
+    $this->entity->createAddress(city: 'c', street: 's', postalCode: '1', countryIsoCode: ' sk ');
+
+    expect(Address::query()->value('country_iso'))->toBe('sk')
+        ->and(Address::query()->inCountry('SK')->count())->toBe(1);
+})->with(['false', '0', 'off', 'no']);

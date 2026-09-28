@@ -15,6 +15,8 @@ use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Database\Factories\AddressFactory;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Events\AddressDeleted;
+use RoundlyConsulting\PackageToolkit\Support\Config;
+use RoundlyConsulting\PackageToolkit\Support\RawExpression;
 
 /**
  * @property int $id
@@ -95,11 +97,26 @@ class Address extends Model
     }
 
     /**
+     * Addresses in a country, matched the way codes were stored: normalised codes are
+     * upper-case, so the argument is too; verbatim codes (`normalise_country` off) are
+     * compared case-insensitively. Alpha-2 and alpha-3 are not cross-mapped — `SK` never
+     * matches a row stored as `SVK`.
+     *
      * @param  Builder<Address>  $query
      */
     public function scopeInCountry(Builder $query, string $iso): void
     {
-        $query->where('country_iso', strtoupper(trim($iso)));
+        $iso = strtoupper(trim($iso));
+
+        if (Config::boolean('addresses.normalise_country', true)) {
+            $query->where('country_iso', $iso);
+
+            return;
+        }
+
+        $column = $query->getQuery()->getGrammar()->wrap($query->qualifyColumn('country_iso'));
+
+        $query->where(new RawExpression("upper({$column})"), $iso);
     }
 
     /**
