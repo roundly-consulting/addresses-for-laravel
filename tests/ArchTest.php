@@ -64,3 +64,10 @@ ArchPresets::morphColumnsUseTheSeam(__DIR__.'/../database/migrations');
 ArchPresets::runtimeRequireIsWhitelisted(__DIR__.'/../composer.json');
 
 ArchPresets::noDebuggingLeftovers();
+
+/**
+ * One path: HasAddresses (the only model trait) reaches behaviour through AddressManager,
+ * never an action, so `Addresses::fake()` sees `addAddress()` / `createAddress()` /
+ * `newAddress()` / `setPrimaryAddress()`.
+ */
+ArchPresets::modelsGoThroughTheFacade('RoundlyConsulting\Addresses');
