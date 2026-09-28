@@ -113,14 +113,15 @@ AddressType::Office->label(); // 'Office'
 
 ### Create an address — fluent builder
 
-The facade and the `newAddress()` model helper return a fluent `PendingAddress` builder.
-Country codes are normalised automatically:
+`Addresses::for($owner)` returns the owner's **address book**; its `new()` starts a fluent
+`PendingAddress` builder (the `newAddress()` model helper does the same). Country codes are
+normalised automatically:
 
 ```php
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Facades\Addresses;
 
-Addresses::for($payer)
+Addresses::for($payer)->new()
     ->type(AddressType::Office)
     ->name('HQ')
     ->primary()
@@ -144,7 +145,7 @@ Calling `save()` without `in()`, `at()`, `postalCode()`, and `country()` throws
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 
-$payer->addAddress(AddressData::make(
+Addresses::for($payer)->add(AddressData::make(
     city: 'Bratislava',
     street: 'Somewhere 1',
     postalCode: '81101',
@@ -152,10 +153,13 @@ $payer->addAddress(AddressData::make(
     type: AddressType::Office,
     isPrimary: true,
 ));
+
+// The same through the model trait:
+$payer->addAddress($data);
 ```
 
-Or pass the fields as named arguments with `createAddress(city: …, street: …, postalCode: …,
-countryIsoCode: …, type: AddressType::Office)`.
+Or pass the fields as named arguments with `$payer->createAddress(city: …, street: …,
+postalCode: …, countryIsoCode: …, type: AddressType::Office)`.
 
 `meta` is stored as JSON and cast back to an `Illuminate\Support\Collection`.
 
@@ -164,7 +168,15 @@ countryIsoCode: …, type: AddressType::Office)`.
 ```php
 use RoundlyConsulting\Addresses\Enums\AddressType;
 
-$payer->addresses;                                   // all addresses
+$book = Addresses::for($payer);
+
+$book->all();                                        // Collection<Address>, oldest first
+$book->primary();                                    // primary across all types (or null)
+$book->primary(AddressType::Office);                 // primary of a type
+$book->ofType(AddressType::Shipping);                // collection of a type
+
+// Model trait shortcuts (they go through the same book):
+$payer->addresses;                                   // all addresses (relation)
 $payer->getAddressOfType(AddressType::Home);         // first of a type
 $payer->getPrimaryAddressOfType(AddressType::Office); // first primary of a type (or null)
 $payer->primaryAddress();                            // primary across all types
@@ -186,16 +198,24 @@ Address::query()->inCountry('SK')->get();
 
 ### Manage the primary address
 
-Promoting one address demotes the others in the same owner + type group:
+Promoting one address demotes the others in the same owner + type group. The book refuses an
+address that belongs to another owner (`AddressOwnershipException`):
 
 ```php
-$address = $payer->getAddressOfType(AddressType::Office);
+$address = Addresses::for($payer)->ofType(AddressType::Office)->first();
 
-$address->markAsPrimary();        // promote this, demote siblings
-$address->markAsPrimary(false);   // demote every office address for this owner
+Addresses::for($payer)->setPrimary($address);   // promote this, demote siblings
+$payer->setPrimaryAddress($address);            // trait shortcut, same guard
+```
 
-// owner-guarded helper (rejects addresses owned by another model)
-$payer->setPrimaryAddress($address);
+### Update or delete an address
+
+```php
+Addresses::update($address, AddressData::make(
+    city: 'Košice', street: 'Main 2', postalCode: '04001', countryIso: 'SK', isPrimary: true,
+));                                             // dispatches AddressUpdated
+
+Addresses::delete($address);                    // soft delete, dispatches AddressDeleted
 ```
 
 ### Format an address
@@ -231,14 +251,15 @@ class AppCountryResolver implements CountryResolver
 ```
 
 With a resolver bound, `$address->country_name` returns the resolved name; without one it is
-`null`.
+`null`. `Addresses::countryName('sk')` returns the resolved name and falls back to the
+normalised ISO code (`'SK'`) when no resolver is bound or it does not know the code.
 
 ### Events
 
 The package dispatches:
 
 - `AddressCreated` — after an address is created
-- `AddressUpdated` — after an address is updated through `UpdateAddressAction`
+- `AddressUpdated` — after an address is updated through `Addresses::update()`
 - `AddressDeleted` — after an address is deleted
 - `PrimaryAddressChanged` — when an address is promoted to primary
 
@@ -276,9 +297,64 @@ class Address extends BaseAddress
 'model' => \App\Models\Address::class,
 ```
 
+### Without the facade
+
+The facade is sugar over the injectable `AddressManager`; each use case is also an action
+class. All three run the same code:
+
+```php
+use RoundlyConsulting\Addresses\Actions\CreateAddressAction;
+use RoundlyConsulting\Addresses\AddressManager;
+
+final class SaveBillingAddress
+{
+    public function __construct(private AddressManager $addresses) {}
+
+    public function __invoke(User $user, AddressData $data): Address
+    {
+        return $this->addresses->for($user)->add($data);
+    }
+}
+
+app(CreateAddressAction::class)->execute($user, $data);   // the raw action
+```
+
+| Facade | Action |
+|---|---|
+| `Addresses::for($o)->add($data)` / `->new()->…->save()` | `CreateAddressAction` |
+| `Addresses::for($o)->setPrimary($address)` | `SetPrimaryAddressAction` |
+| `Addresses::update($address, $data)` | `UpdateAddressAction` |
+| `Addresses::delete($address)` | `DeleteAddressAction` |
+
 ## Testing
 
-The `InteractsWithAddresses` trait adds expressive assertions to your tests:
+`Addresses::fake()` swaps the manager — for the facade *and* for anything that injects
+`AddressManager` — with a recording fake that writes nothing. Added addresses stay in memory
+(unsaved) and show up in the owner's reads next to the stored rows; ownership is still
+enforced. Calls through the `HasAddresses` trait are recorded too:
+
+```php
+use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
+use RoundlyConsulting\Addresses\Facades\Addresses;
+
+$fake = Addresses::fake();
+
+$user->addAddress($data);                       // your code under test
+Addresses::for($user)->setPrimary($address);
+
+$fake->assertAdded($user, fn (AddressData $d) => $d->city === 'Bratislava');
+$fake->assertPrimarySet($address);
+$fake->assertNothingDeleted();
+```
+
+| Assertion | Negative |
+|---|---|
+| `assertAdded(?Model $to = null, ?Closure $where = null)` | `assertNothingAdded()` |
+| `assertUpdated(?Address $address = null, ?Closure $where = null)` | `assertNothingUpdated()` |
+| `assertDeleted(?Address $address = null)` | `assertNothingDeleted()` |
+| `assertPrimarySet(?Address $address = null)` | `assertNothingPrimarySet()` |
+
+For database-backed tests, the `InteractsWithAddresses` trait adds expressive assertions:
 
 ```php
 use RoundlyConsulting\Addresses\Enums\AddressType;
