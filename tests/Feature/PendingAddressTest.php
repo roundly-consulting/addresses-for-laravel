@@ -11,7 +11,7 @@ use RoundlyConsulting\Addresses\Tests\TestModel;
 it('persists a full fluent chain', function () {
     $entity = TestModel::create();
 
-    $address = Addresses::for($entity)
+    $address = Addresses::for($entity)->new()
         ->type(AddressType::Office)
         ->name('HQ')
         ->primary()
@@ -42,5 +42,5 @@ it('builds from the model helper', function () {
 it('throws when required fields are missing', function () {
     $entity = TestModel::create();
 
-    Addresses::for($entity)->in('Bratislava')->save();
+    Addresses::for($entity)->new()->in('Bratislava')->save();
 })->throws(IncompleteAddressException::class);

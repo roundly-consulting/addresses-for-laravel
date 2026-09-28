@@ -16,7 +16,7 @@ it('dispatches created on create', function () {
     Event::fake([AddressCreated::class]);
     $entity = TestModel::create();
 
-    Addresses::for($entity)->in('A')->at('B')->postalCode('C')->country('SK')->save();
+    Addresses::for($entity)->new()->in('A')->at('B')->postalCode('C')->country('SK')->save();
 
     Event::assertDispatched(AddressCreated::class);
 });

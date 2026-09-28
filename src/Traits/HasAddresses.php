@@ -8,8 +8,9 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphMany;
 use Illuminate\Support\Collection;
-use RoundlyConsulting\Addresses\Actions\CreateAddressAction;
 use RoundlyConsulting\Addresses\Address;
+use RoundlyConsulting\Addresses\AddressBook;
+use RoundlyConsulting\Addresses\AddressManager;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
@@ -31,18 +32,14 @@ trait HasAddresses
 
     public function getAddressOfType(AddressType $type, bool $onlyPrimary = false): ?Address
     {
-        return $this->addresses()
-            ->where('type', $type->value)
-            ->when($onlyPrimary, fn ($query) => $query->where('is_primary', true))
-            ->first();
+        return $onlyPrimary
+            ? $this->getPrimaryAddressOfType($type)
+            : $this->addressBook()->ofType($type)->first();
     }
 
     public function getPrimaryAddressOfType(AddressType $type): ?Address
     {
-        return $this->getAddressOfType(
-            type: $type,
-            onlyPrimary: true,
-        );
+        return $this->addressBook()->primary($type);
     }
 
     /**
@@ -72,12 +69,12 @@ trait HasAddresses
 
     public function addAddress(AddressData $data): Address
     {
-        return app(CreateAddressAction::class)->execute($this, $data);
+        return $this->addressBook()->add($data);
     }
 
     public function newAddress(): PendingAddress
     {
-        return new PendingAddress($this);
+        return $this->addressBook()->new();
     }
 
     /**
@@ -85,10 +82,7 @@ trait HasAddresses
      */
     public function primaryAddress(?AddressType $type = null): ?Address
     {
-        return $this->addresses()
-            ->where('is_primary', true)
-            ->when($type instanceof AddressType, fn ($query) => $query->where('type', $type?->value))
-            ->first();
+        return $this->addressBook()->primary($type);
     }
 
     /**
@@ -96,17 +90,12 @@ trait HasAddresses
      */
     public function addressesOfType(AddressType $type): EloquentCollection
     {
-        /** @var EloquentCollection<int, Address> $addresses */
-        $addresses = $this->addresses()
-            ->where('type', $type->value)
-            ->get();
-
-        return $addresses;
+        return $this->addressBook()->ofType($type);
     }
 
     public function hasAddresses(): bool
     {
-        return $this->addresses()->exists();
+        return $this->addressBook()->all()->isNotEmpty();
     }
 
     /**
@@ -116,13 +105,15 @@ trait HasAddresses
      */
     public function setPrimaryAddress(Address $address): void
     {
-        $belongsToOwner = (string) $address->addressable_type === $this->getMorphClass()
-            && (string) $address->addressable_id === (string) $this->getKey();
+        $this->addressBook()->setPrimary($address);
+    }
 
-        if (! $belongsToOwner) {
-            throw AddressOwnershipException::make();
-        }
-
-        $address->markAsPrimary();
+    /**
+     * This model's address book — every shortcut above goes through it, so the
+     * `Addresses` facade, host overrides and `Addresses::fake()` see each call.
+     */
+    public function addressBook(): AddressBook
+    {
+        return app(AddressManager::class)->for($this);
     }
 }

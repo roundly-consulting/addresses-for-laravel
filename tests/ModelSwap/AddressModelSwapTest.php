@@ -41,7 +41,7 @@ it('honours a host address model through every write flow', function (): void {
             type: AddressType::Home,
         ));
 
-        $viaFacade = Addresses::for($entity)
+        $viaFacade = Addresses::for($entity)->new()
             ->in('A')->at('B')->postalCode('C')->country('SK')->save();
 
         return [
@@ -70,7 +70,7 @@ it('reads through the swapped model in manager queries', function (): void {
         isPrimary: true,
     ));
 
-    $primary = app(AddressManager::class)->primaryFor($entity, AddressType::Work);
+    $primary = app(AddressManager::class)->for($entity)->primary(AddressType::Work);
 
     expect($primary)->toBeInstanceOf(CustomAddress::class)
         // The concrete class, not just `instanceof`: a row hydrated as the packaged class

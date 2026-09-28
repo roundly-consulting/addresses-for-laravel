@@ -38,7 +38,7 @@ final class AddressesServiceProvider extends PackageServiceProvider
     {
         parent::register();
 
-        $this->app->singleton(AddressManager::class, fn (): AddressManager => new AddressManager);
+        $this->app->singleton(AddressManager::class);
 
         $this->registerCountryResolver();
     }

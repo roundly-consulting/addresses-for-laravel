@@ -3,14 +3,14 @@
 declare(strict_types=1);
 
 use Illuminate\Foundation\AliasLoader;
+use RoundlyConsulting\Addresses\AddressBook;
 use RoundlyConsulting\Addresses\Facades\Addresses;
-use RoundlyConsulting\Addresses\PendingAddress;
 use RoundlyConsulting\Addresses\Tests\TestModel;
 
-it('resolves the facade to a pending builder', function () {
+it('resolves the facade to an address book', function () {
     $entity = TestModel::create();
 
-    expect(Addresses::for($entity))->toBeInstanceOf(PendingAddress::class);
+    expect(Addresses::for($entity))->toBeInstanceOf(AddressBook::class);
 });
 
 it('registers the configured alias', function () {

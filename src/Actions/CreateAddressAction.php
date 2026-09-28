@@ -10,7 +10,10 @@ use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Events\AddressCreated;
 use RoundlyConsulting\Addresses\Support\AddressModel;
 
-final class CreateAddressAction
+/**
+ * Adds an address to an owner; a primary flag promotes it within its type group.
+ */
+final readonly class CreateAddressAction
 {
     public function execute(Model $addressable, AddressData $data): Address
     {

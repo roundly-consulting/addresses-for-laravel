@@ -147,8 +147,20 @@ class Address extends Model
     }
 
     /**
+     * Whether this address belongs to the given owner.
+     */
+    public function isOwnedBy(Model $addressable): bool
+    {
+        return $this->addressable_type === $addressable->getMorphClass()
+            && (string) $this->addressable_id === (string) $addressable->getKey();
+    }
+
+    /**
      * Mark this address as the primary one for its addressable + type, demoting
      * any siblings. Passing false simply demotes every address in the group.
+     *
+     * @internal the primary invariant behind the actions; promote an address with
+     *           `Addresses::for($owner)->setPrimary($address)`
      */
     public function markAsPrimary(bool $isPrimary = true): void
     {

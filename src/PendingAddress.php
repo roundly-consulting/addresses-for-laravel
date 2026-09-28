@@ -4,16 +4,14 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
-use RoundlyConsulting\Addresses\Actions\CreateAddressAction;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\IncompleteAddressException;
 
 /**
- * Fluent builder produced by Addresses::for() and $model->newAddress(). It
- * accumulates fields and persists through CreateAddressAction on save().
+ * Fluent builder produced by `Addresses::for($owner)->new()` and `$model->newAddress()`.
+ * It accumulates fields and adds the address through the owner's AddressBook on save().
  */
 final class PendingAddress
 {
@@ -34,8 +32,11 @@ final class PendingAddress
     /** @var Collection<array-key, mixed>|null */
     private ?Collection $meta = null;
 
+    /**
+     * @internal build it with `Addresses::for($owner)->new()`
+     */
     public function __construct(
-        private readonly Model $addressable,
+        private readonly AddressBook $book,
     ) {}
 
     public function type(AddressType $type): self
@@ -99,7 +100,7 @@ final class PendingAddress
 
     public function save(): Address
     {
-        return app(CreateAddressAction::class)->execute($this->addressable, $this->data());
+        return $this->book->add($this->data());
     }
 
     private function data(): AddressData

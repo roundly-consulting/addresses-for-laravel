@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use RoundlyConsulting\Addresses\Address;
+use RoundlyConsulting\Addresses\AddressManager;
 use RoundlyConsulting\Addresses\Exceptions\AddressesException;
 use RoundlyConsulting\Testing\Arch\ArchPresets;
 
@@ -13,11 +14,13 @@ use RoundlyConsulting\Testing\Arch\ArchPresets;
 ArchPresets::strictTypes('RoundlyConsulting\Addresses');
 
 /**
- * Two deliberate extension points are exempt: Address, which `addresses.model` invites a
- * host to subclass (pinned by the preset below instead), and AddressesException, the base
- * every addresses error extends so a host can catch them uniformly.
+ * Three deliberate extension points are exempt: Address, which `addresses.model` invites a
+ * host to subclass (pinned by the preset below instead), AddressesException, the base
+ * every addresses error extends so a host can catch them uniformly, and AddressManager,
+ * which `Testing\AddressesFake` extends so an injected manager keeps working under
+ * `Addresses::fake()`.
  */
-ArchPresets::finalByDefault('RoundlyConsulting\Addresses', [Address::class, AddressesException::class]);
+ArchPresets::finalByDefault('RoundlyConsulting\Addresses', [Address::class, AddressesException::class, AddressManager::class]);
 
 /**
  * The counter-weight, and the fleet's 7×-shipped fatal: `final` on a config-swappable
