@@ -8,6 +8,7 @@ use RoundlyConsulting\Addresses\AddressManager;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
+use RoundlyConsulting\Addresses\Exceptions\TrashedAddressException;
 use RoundlyConsulting\Addresses\Facades\Addresses;
 use RoundlyConsulting\Addresses\Testing\AddressesFake;
 use RoundlyConsulting\Addresses\Tests\TestModel;
@@ -137,8 +138,8 @@ it('fails a positive assertion when nothing matching was recorded', function (Cl
     $otherAddress = storedAddress($other);
     $other->addAddress(fakeAddress());
     Addresses::update($otherAddress, fakeAddress());
-    Addresses::delete($otherAddress);
     Addresses::for($other)->setPrimary($otherAddress);
+    Addresses::delete($otherAddress);
 
     $assert($fake, $owner, $address);
 })->with([
@@ -185,3 +186,83 @@ it('fails an assertNothing* once the matching call was recorded', function (Clos
         fn (AddressesFake $fake) => $fake->assertNothingPrimarySet(),
     ],
 ])->throws(ExpectationFailedException::class);
+
+it('answers primary() with a stored address promoted through the fake, like the real manager', function (): void {
+    $owner = TestModel::create();
+    $current = storedAddress($owner, primary: true);
+    $next = storedAddress($owner);
+    Addresses::fake();
+
+    Addresses::for($owner)->setPrimary($next);
+
+    expect(Addresses::for($owner)->primary(AddressType::Default)?->is($next))->toBeTrue()
+        ->and(Addresses::for($owner)->primary()?->is($next))->toBeTrue()
+        ->and(Addresses::for($owner)->all()->firstWhere('id', $current->id)?->is_primary)->toBeFalse()
+        ->and(Addresses::for($owner)->all()->firstWhere('id', $next->id)?->is_primary)->toBeTrue()
+        ->and($current->fresh()?->is_primary)->toBeTrue();
+});
+
+it('reflects updates and deletes made through the fake in its reads', function (): void {
+    $owner = TestModel::create();
+    $primary = storedAddress($owner, primary: true);
+    $other = storedAddress($owner);
+    Addresses::fake();
+
+    Addresses::update($other, fakeAddress(AddressType::Default, primary: true, city: 'Zilina'));
+
+    expect(Addresses::for($owner)->primary()?->city)->toBe('Zilina')
+        ->and(Addresses::for($owner)->all()->firstWhere('id', $primary->id)?->is_primary)->toBeFalse();
+
+    Addresses::delete($other);
+
+    expect(Addresses::for($owner)->primary())->toBeNull()
+        ->and(Addresses::for($owner)->all())->toHaveCount(1)
+        ->and(Address::query()->count())->toBe(2);
+});
+
+it('demotes the primary an update moves into another type group', function (): void {
+    $owner = TestModel::create();
+    $primary = storedAddress($owner, primary: true);
+    Addresses::fake();
+
+    Addresses::update($primary, fakeAddress(AddressType::Billing, primary: false));
+
+    expect(Addresses::for($owner)->primary())->toBeNull()
+        ->and(Addresses::for($owner)->ofType(AddressType::Billing))->toHaveCount(1);
+});
+
+it('refuses to promote a trashed address, like the real manager', function (Closure $trash): void {
+    $owner = TestModel::create();
+    $address = storedAddress($owner);
+    $fake = Addresses::fake();
+
+    $trash($address);
+
+    expect(fn () => Addresses::for($owner)->setPrimary($address))->toThrow(TrashedAddressException::class);
+    $fake->assertNothingPrimarySet();
+})->with([
+    'soft-deleted in the database' => [fn (Address $address) => $address->delete()],
+    'deleted through the fake' => [fn (Address $address) => Addresses::delete($address)],
+]);
+
+it('refuses an update that would promote a deleted address, and records nothing', function (): void {
+    $owner = TestModel::create();
+    $address = storedAddress($owner);
+    $fake = Addresses::fake();
+    Addresses::delete($address);
+
+    expect(fn () => Addresses::update($address, fakeAddress(primary: true)))->toThrow(TrashedAddressException::class);
+    $fake->assertNothingUpdated();
+});
+
+it('applies updates to addresses added through the fake', function (): void {
+    $owner = TestModel::create();
+    Addresses::fake();
+    $added = Addresses::for($owner)->add(fakeAddress(primary: true));
+
+    $updated = Addresses::update($added, fakeAddress(primary: false, city: 'Zilina'));
+
+    expect(Addresses::for($owner)->all()->sole())->toBe($updated)
+        ->and($updated->city)->toBe('Zilina')
+        ->and(Addresses::for($owner)->primary())->toBeNull();
+});

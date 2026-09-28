@@ -14,14 +14,17 @@ use RoundlyConsulting\Addresses\AddressManager;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
+use RoundlyConsulting\Addresses\Exceptions\TrashedAddressException;
 use RoundlyConsulting\Addresses\Support\AddressModel;
 
 /**
  * Test double for the address manager, installed by `Addresses::fake()`. Nothing is
- * written: added addresses live in memory (unsaved) and are merged into the owner's
- * reads, and every add, update, delete and primary change — through the facade, an
- * injected manager, the address book or the HasAddresses trait — is recorded for the
- * assertions below. Ownership is still enforced.
+ * written: added addresses live in memory (unsaved), and the owner's reads answer from the
+ * stored rows with every add, update, delete and primary change made through the fake
+ * applied on top — so `primary()` reports what the real manager would after the same calls.
+ * Each of those calls — through the facade, an injected manager, the address book or the
+ * HasAddresses trait — is also recorded for the assertions below. Ownership is still
+ * enforced, and so is the refusal to promote a deleted address.
  */
 final class AddressesFake extends AddressManager
 {
@@ -37,6 +40,21 @@ final class AddressesFake extends AddressManager
     /** @var list<array{owner: string, address: Address}> */
     private array $promoted = [];
 
+    /**
+     * Stored addresses as the fake's updates left them, by key.
+     *
+     * @var array<array-key, Address>
+     */
+    private array $replaced = [];
+
+    /**
+     * The primary of each owner + type group the fake changed; null once the fake demoted
+     * or deleted it. Groups the fake never touched answer from the stored flags.
+     *
+     * @var array<string, Address|null>
+     */
+    private array $primaries = [];
+
     public function __construct(Container $container)
     {
         parent::__construct($container);
@@ -44,14 +62,29 @@ final class AddressesFake extends AddressManager
 
     public function update(Address $address, AddressData $data): Address
     {
+        if ($data->isPrimary) {
+            $this->refuseTrashed($address);
+        }
+
         $this->updated[] = ['address' => $address, 'data' => $data];
 
-        return (clone $address)->forceFill($data->toAttributes());
+        $updated = (clone $address)->forceFill($data->toAttributes());
+
+        $this->release($address);
+        $this->swap($address, $updated);
+
+        if ($data->isPrimary) {
+            $this->primaries[$this->group($updated)] = $updated;
+        }
+
+        return $updated;
     }
 
     public function delete(Address $address): void
     {
         $this->deleted[] = $address;
+
+        $this->release($address);
     }
 
     public function addFor(Model $addressable, AddressData $data): Address
@@ -65,10 +98,12 @@ final class AddressesFake extends AddressManager
         ]);
 
         if ($data->isPrimary) {
-            $this->demoteSiblings($address);
+            $this->primaries[$this->group($address)] = $address;
         }
 
         $this->added[] = ['owner' => $this->identify($addressable), 'data' => $data, 'address' => $address];
+
+        $this->flag($this->view($addressable));
 
         return $address;
     }
@@ -79,26 +114,27 @@ final class AddressesFake extends AddressManager
             throw AddressOwnershipException::make();
         }
 
-        $this->demoteSiblings($address);
+        $this->refuseTrashed($address);
+
+        $this->primaries[$this->group($address)] = $address;
         $address->forceFill(['is_primary' => true]);
 
         $this->promoted[] = ['owner' => $this->identify($addressable), 'address' => $address];
+
+        $this->flag($this->view($addressable));
 
         return $address;
     }
 
     /**
-     * The latest primary added through the fake wins; otherwise the stored one.
+     * The first primary in the fake's view — the oldest stored one, then those added
+     * through the fake — as the real manager answers it.
      */
     public function primaryFor(Model $addressable, ?AddressType $type = null): ?Address
     {
-        foreach (array_reverse($this->memoryFor($addressable)) as $address) {
-            if ($address->is_primary && ($type === null || $address->type === $type)) {
-                return $address;
-            }
-        }
-
-        return parent::primaryFor($addressable, $type);
+        return $this->allFor($addressable)->first(
+            fn (Address $address): bool => $address->is_primary && ($type === null || $address->type === $type),
+        );
     }
 
     /**
@@ -112,13 +148,14 @@ final class AddressesFake extends AddressManager
     }
 
     /**
-     * The owner's stored addresses followed by those added through the fake.
+     * The owner's stored addresses followed by those added through the fake, with the
+     * fake's updates, deletes and primary changes applied.
      *
      * @return Collection<int, Address>
      */
     public function allFor(Model $addressable): Collection
     {
-        return parent::allFor($addressable)->concat($this->memoryFor($addressable))->values();
+        return $this->flag($this->view($addressable));
     }
 
     /**
@@ -199,31 +236,109 @@ final class AddressesFake extends AddressManager
         return $a === $b || ($a->exists && $b->exists && $a->is($b));
     }
 
-    private function demoteSiblings(Address $address): void
+    /**
+     * @return Collection<int, Address>
+     */
+    private function view(Model $addressable): Collection
     {
-        foreach ($this->added as $added) {
-            $sibling = $added['address'];
+        $owner = $this->identify($addressable);
 
-            if ($sibling !== $address
-                && $sibling->addressable_type === $address->addressable_type
-                && (string) $sibling->addressable_id === (string) $address->addressable_id
-                && $sibling->type === $address->type) {
-                $sibling->forceFill(['is_primary' => false]);
+        $stored = parent::allFor($addressable)
+            ->map(fn (Address $address): Address => $this->replaced[$this->key($address)] ?? $address);
+
+        $memory = array_column(
+            array_filter($this->added, fn (array $added): bool => $added['owner'] === $owner),
+            'address',
+        );
+
+        return $stored->concat($memory)
+            ->reject(fn (Address $address): bool => $this->wasDeleted($address))
+            ->values();
+    }
+
+    /**
+     * Set each address's primary flag from the groups the fake changed.
+     *
+     * @param  Collection<int, Address>  $addresses
+     * @return Collection<int, Address>
+     */
+    private function flag(Collection $addresses): Collection
+    {
+        foreach ($addresses as $address) {
+            $group = $this->group($address);
+
+            if (array_key_exists($group, $this->primaries)) {
+                $primary = $this->primaries[$group];
+
+                $address->forceFill(['is_primary' => $primary instanceof Address && $this->same($address, $primary)]);
+            }
+        }
+
+        return $addresses;
+    }
+
+    /**
+     * Drop the address from any group it is the fake's primary of.
+     */
+    private function release(Address $address): void
+    {
+        foreach ($this->primaries as $group => $primary) {
+            if ($primary instanceof Address && $this->same($primary, $address)) {
+                $this->primaries[$group] = null;
             }
         }
     }
 
     /**
-     * @return list<Address>
+     * Put an updated copy where the original was: in the stored overlay, or in the list of
+     * addresses added through the fake.
      */
-    private function memoryFor(Model $addressable): array
+    private function swap(Address $original, Address $updated): void
     {
-        $owner = $this->identify($addressable);
+        if ($original->exists) {
+            $this->replaced[$this->key($original)] = $updated;
 
-        return array_column(
-            array_filter($this->added, fn (array $added): bool => $added['owner'] === $owner),
-            'address',
-        );
+            return;
+        }
+
+        foreach ($this->added as $index => $added) {
+            if ($added['address'] === $original) {
+                $this->added[$index]['address'] = $updated;
+            }
+        }
+    }
+
+    /**
+     * @throws TrashedAddressException
+     */
+    private function refuseTrashed(Address $address): void
+    {
+        if ($address->trashed() || $this->wasDeleted($address)) {
+            throw TrashedAddressException::cannotBePrimary();
+        }
+    }
+
+    private function wasDeleted(Address $address): bool
+    {
+        foreach ($this->deleted as $deleted) {
+            if ($this->same($deleted, $address)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function group(Address $address): string
+    {
+        return $address->addressable_type.':'.((string) $address->addressable_id).'|'.$address->type->value;
+    }
+
+    private function key(Address $address): string
+    {
+        $key = $address->getKey();
+
+        return is_scalar($key) ? (string) $key : '';
     }
 
     private function identify(Model $addressable): string
