@@ -21,8 +21,9 @@
 
 Store billing, shipping, or other addresses on any Eloquent model via a polymorphic
 relationship. Add the `HasAddresses` trait to a model and attach as many typed addresses as
-you need, with a fluent builder, a typed `AddressType` enum, primary-address handling, ISO
-country normalisation, query scopes, events, an API resource, and test helpers.
+you need, with a fluent builder, a typed `AddressType` enum, primary-address handling (one
+primary per owner and type, promoted atomically), country-code normalisation, query scopes,
+events, an API resource, and test helpers.
 
 ## Requirements
 
@@ -46,7 +47,9 @@ composer require roundly-consulting/addresses-for-laravel
 ```
 
 Publish and run the migration. The migration is **not** loaded automatically — publishing it is
-required, and the published copy is yours to edit:
+required, and the published copy is yours to edit. If the models that own addresses use UUID or
+ULID keys, set `ADDRESSES_KEY_TYPE` (see [Configuration](#configuration)) **before** migrating:
+it decides the type of the `addressable_id` column.
 
 ```bash
 php artisan vendor:publish --tag="addresses-migrations"
@@ -69,6 +72,7 @@ use RoundlyConsulting\Addresses\Enums\AddressType;
 
 return [
     'model' => Address::class,
+    'key_type' => env('ADDRESSES_KEY_TYPE', 'bigint'),
     'default_type' => AddressType::Default->value,
     'normalise_country' => true,
     'country_resolver' => null,
@@ -79,10 +83,15 @@ return [
 | Key                 | Type                  | Default              | Purpose                                                                                              |
 |---------------------|-----------------------|----------------------|------------------------------------------------------------------------------------------------------|
 | `model`             | `class-string`        | `Address::class`     | The model the trait/facade read and write through. Swap it for a subclass to customise behaviour.    |
-| `default_type`      | `string`              | `'default'`          | The `AddressType` used when none is supplied.                                                         |
-| `normalise_country` | `bool`                | `true`               | Trim, upper-case, and validate country codes as ISO 3166-1 alpha-2/alpha-3 on the way in.             |
+| `key_type`          | `string`              | `'bigint'`           | Env `ADDRESSES_KEY_TYPE`. Key type of the polymorphic `addressable_id` column: `bigint`, `uuid` or `ulid`, matching your owners' primary keys (all owners must share one). Read by the migration, so set it **before** `php artisan migrate`; any other value falls back to `bigint`. |
+| `default_type`      | `string`              | `'default'`          | The `AddressType` value an address gets when its creator names none (the builder without `type()`, `AddressData` without `type`, `createAddress()` without `type`). A value that is not an `AddressType` case throws `InvalidAddressTypeException`. |
+| `normalise_country` | `bool`                | `true`               | Trim, upper-case, and check that country codes are two or three letters on the way in. `false` (or `'false'`/`'0'`/`'off'` from env) stores them as given. |
 | `country_resolver`  | `class-string\|null`  | `null`               | Optional host implementation of `CountryResolver` used to resolve country names (and geocode).        |
-| `facade_alias`      | `string\|null`        | `'Addresses'`        | The class alias registered for the facade. Set to `null` to skip registering a global alias.          |
+| `facade_alias`      | `string\|null`        | `'Addresses'`        | The global class alias registered for the facade. A string renames it; `null` skips it entirely (the package declares no other alias). |
+
+Country codes are **shape-checked, not looked up**: the package bundles no country list, so
+`xx` is accepted as `XX`, and an alpha-3 code stays alpha-3 (`svk` → `SVK`). Store one style
+consistently — `inCountry('SK')` does not match a row stored as `SVK`.
 
 ## Usage
 
@@ -115,7 +124,7 @@ AddressType::Office->label(); // 'Office'
 
 `Addresses::for($owner)` returns the owner's **address book**; its `new()` starts a fluent
 `PendingAddress` builder (the `newAddress()` model helper does the same). Country codes are
-normalised automatically:
+normalised automatically, and an address with no `type()` gets the configured `default_type`:
 
 ```php
 use RoundlyConsulting\Addresses\Enums\AddressType;
@@ -159,7 +168,8 @@ $payer->addAddress($data);
 ```
 
 Or pass the fields as named arguments with `$payer->createAddress(city: …, street: …,
-postalCode: …, countryIsoCode: …, type: AddressType::Office)`.
+postalCode: …, countryIsoCode: …, type: AddressType::Office)`. Leave `type` out of any of
+these and the address gets the configured `default_type`.
 
 `meta` is stored as JSON and cast back to an `Illuminate\Support\Collection`.
 
@@ -196,10 +206,21 @@ Address::query()->ofType(AddressType::Billing)->get();
 Address::query()->inCountry('SK')->get();
 ```
 
+`inCountry()` matches codes the way they were stored: with `normalise_country` on it
+upper-cases its argument (`' sk '` finds `SK`); with it off it compares case-insensitively
+(`'SK'` finds a verbatim `sk`). Alpha-2 and alpha-3 codes are never mapped onto each other.
+
 ### Manage the primary address
 
-Promoting one address demotes the others in the same owner + type group. The book refuses an
-address that belongs to another owner (`AddressOwnershipException`):
+An owner has at most one primary address per type. Promoting one — through `setPrimary()`,
+or by adding/updating an address with `isPrimary: true` / `->primary()` — demotes the others in
+the same owner + type group, in one transaction under a lock on the group, so a failure half-way
+leaves the old primary in place and two concurrent promotions cannot both win. On PostgreSQL and
+SQLite a partial unique index also makes a second primary impossible at the database level.
+
+The book refuses an address that belongs to another owner (`AddressOwnershipException`) and a
+soft-deleted one (`TrashedAddressException` — restore it first). Both are checked against the
+stored row, not the copy you pass in:
 
 ```php
 $address = Addresses::for($payer)->ofType(AddressType::Office)->first();
@@ -218,6 +239,9 @@ Addresses::update($address, AddressData::make(
 Addresses::delete($address);                    // soft delete, dispatches AddressDeleted
 ```
 
+`update()` overwrites the address with the data you pass, including its flag: `isPrimary: true`
+promotes it, and leaving `isPrimary` out (it defaults to `false`) demotes it.
+
 ### Format an address
 
 ```php
@@ -229,8 +253,7 @@ $address->formatted(' | '); // custom separator; empty parts are skipped
 
 ### Country names (optional resolver)
 
-The package validates and normalises ISO country codes but ships no country-name list or
-geocoder. To resolve names (or coordinates), implement `CountryResolver` in your app and
+The package shape-checks and normalises country codes but ships no country list or geocoder. To resolve names (or coordinates), implement `CountryResolver` in your app and
 register it in config:
 
 ```php
@@ -261,7 +284,10 @@ The package dispatches:
 - `AddressCreated` — after an address is created
 - `AddressUpdated` — after an address is updated through `Addresses::update()`
 - `AddressDeleted` — after an address is deleted
-- `PrimaryAddressChanged` — when an address is promoted to primary
+- `PrimaryAddressChanged` — whenever an address becomes the primary of its type: `setPrimary()`,
+  adding one with `isPrimary: true` / `->primary()`, or updating one with `isPrimary: true`. It
+  fires after `AddressCreated` / `AddressUpdated`, once the promotion is written, and not when
+  the address already was the primary.
 
 Each event exposes the related `$address`.
 
@@ -333,8 +359,10 @@ app(CreateAddressAction::class)->execute($user, $data);   // the raw action
 
 `Addresses::fake()` swaps the manager — for the facade *and* for anything that injects
 `AddressManager` — with a recording fake that writes nothing. Added addresses stay in memory
-(unsaved) and show up in the owner's reads next to the stored rows; ownership is still
-enforced. Calls through the `HasAddresses` trait are recorded too:
+(unsaved), and the owner's reads (`all()`, `ofType()`, `primary()`) answer from the stored rows
+with the fake's adds, updates, deletes and primary changes applied — so `primary()` returns what
+the real manager would after the same calls. Ownership is still enforced, and so is the refusal
+to promote a deleted address. Calls through the `HasAddresses` trait are recorded too:
 
 ```php
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;

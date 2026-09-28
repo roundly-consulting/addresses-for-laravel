@@ -41,7 +41,12 @@ return [
     | Default Address Type
     |--------------------------------------------------------------------------
     |
-    | The AddressType used when none is provided when creating an address.
+    | The AddressType value an address gets when its creator names none — the
+    | fluent builder without type(), AddressData without a type, and
+    | createAddress() without one. A value that is not an AddressType case
+    | throws InvalidAddressTypeException when such an address is built.
+    |
+    | Supported: "default", "billing", "shipping", "home", "work", "office"
     |
     */
 
@@ -52,8 +57,11 @@ return [
     | Normalise Country Codes
     |--------------------------------------------------------------------------
     |
-    | When true, country codes are trimmed, upper-cased, and validated as ISO
-    | 3166-1 alpha-2/alpha-3 on the way in. Set to false to store them verbatim.
+    | When true, country codes are trimmed, upper-cased, and checked to be two
+    | or three letters (the shape of ISO 3166-1 alpha-2/alpha-3) on the way in.
+    | No country list is bundled, so the code itself is not looked up, and an
+    | alpha-3 code is kept as alpha-3. Set to false to store codes as given
+    | (trimmed); inCountry() then matches them case-insensitively.
     |
     */
 
@@ -78,8 +86,8 @@ return [
     | Facade Alias
     |--------------------------------------------------------------------------
     |
-    | The class alias registered for the Addresses facade. Set to null to skip
-    | registering a global alias.
+    | The class alias registered for the Addresses facade. Set to null (or
+    | false) to skip registering a global alias, or to a string to rename it.
     |
     */
 
