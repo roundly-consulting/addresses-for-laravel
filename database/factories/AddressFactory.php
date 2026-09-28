@@ -20,7 +20,9 @@ final class AddressFactory extends Factory
     public function definition(): array
     {
         return [
-            'is_primary' => $this->faker->boolean(),
+            // Plain by default: an owner holds one primary per type, so a batch of random flags
+            // would collide. Ask for one with the primary() state.
+            'is_primary' => false,
             'type' => AddressType::Default->value,
             'name' => $this->faker->streetName().' - '.$this->faker->randomElement(['Home', 'Office', 'Work']),
             'city' => $this->faker->city(),

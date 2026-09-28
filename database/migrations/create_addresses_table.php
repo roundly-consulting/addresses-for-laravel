@@ -27,5 +27,36 @@ return new class extends Migration
             $table->timestamps();
             $table->softDeletes();
         });
+
+        $this->onePrimaryPerOwnerAndType();
+    }
+
+    /**
+     * At most one primary per owner + type, enforced by the engine.
+     *
+     * Promotion locks the owner's type group, which serialises it on MySQL/MariaDB and SQL
+     * Server: their locking reads wait on a racing transaction's uncommitted rows. Postgres's
+     * `FOR UPDATE` cannot see a row inserted after its snapshot, so two first addresses of a
+     * type added as primary at once would both win — this partial unique index refuses the
+     * second, and the promotion retries against the committed winner. SQLite gets the same
+     * index (identical syntax), so the default test engine exercises the guard.
+     */
+    private function onePrimaryPerOwnerAndType(): void
+    {
+        $connection = Schema::getConnection();
+
+        if (! in_array($connection->getDriverName(), ['pgsql', 'sqlite'], true)) {
+            return;
+        }
+
+        $grammar = $connection->getQueryGrammar();
+
+        $connection->statement(sprintf(
+            'create unique index %s on %s (%s) where %s',
+            $grammar->wrap($connection->getTablePrefix().'addresses_one_primary_per_type'),
+            $grammar->wrapTable('addresses'),
+            $grammar->columnize(['addressable_type', 'addressable_id', 'type']),
+            $grammar->wrap('is_primary'),
+        ));
     }
 };

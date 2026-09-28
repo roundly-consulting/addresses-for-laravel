@@ -6,52 +6,18 @@ use Illuminate\Support\Collection;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\Tests\TestModel;
 
-it('marks all addresses as not primary', function () {
+it('builds plain addresses by default and a primary through the factory state', function () {
     $addressable = [
         'addressable_id' => TestModel::create()->id,
         'addressable_type' => TestModel::class,
         'type' => 'default',
     ];
 
-    $addresses = Address::factory(5)->create($addressable);
+    Address::factory(5)->create($addressable);
+    Address::factory()->primary()->create($addressable);
 
-    $addresses->first()->markAsPrimary(isPrimary: false);
-
-    expect(Address::query()->where($addressable + ['is_primary' => false])->count())
-        ->toBe(5);
-});
-
-it('marks address as primary and others as not primary', function () {
-    $addressable = [
-        'addressable_id' => TestModel::create()->id,
-        'addressable_type' => TestModel::class,
-        'type' => 'default',
-    ];
-
-    $addresses = Address::factory(4)->create($addressable);
-    $address = Address::factory()->create($addressable + ['is_primary' => false]);
-
-    $address->markAsPrimary();
-
-    expect($address->refresh())
-        ->is_primary->toBe(true);
-
-    expect(Address::query()->where($addressable + ['is_primary' => false])->count())
-        ->toBe(4);
-});
-
-it('keeps an already primary address primary without demoting it', function () {
-    $addressable = [
-        'addressable_id' => TestModel::create()->id,
-        'addressable_type' => TestModel::class,
-        'type' => 'default',
-    ];
-
-    $address = Address::factory()->create($addressable + ['is_primary' => true]);
-
-    $address->markAsPrimary();
-
-    expect($address->refresh())->is_primary->toBeTrue();
+    expect(Address::query()->where($addressable + ['is_primary' => false])->count())->toBe(5)
+        ->and(Address::query()->where($addressable + ['is_primary' => true])->count())->toBe(1);
 });
 
 it('casts meta to a collection', function () {

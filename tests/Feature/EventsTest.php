@@ -44,9 +44,9 @@ it('dispatches primary changed on promotion', function () {
         'is_primary' => false,
     ]);
 
-    $address->markAsPrimary();
+    Addresses::for($entity)->setPrimary($address);
 
-    Event::assertDispatched(PrimaryAddressChanged::class);
+    Event::assertDispatched(PrimaryAddressChanged::class, fn (PrimaryAddressChanged $event): bool => $event->address->is($address));
 });
 
 it('does not dispatch updated unless updated', function () {

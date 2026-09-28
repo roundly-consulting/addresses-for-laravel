@@ -7,6 +7,7 @@ use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
 use RoundlyConsulting\Addresses\Exceptions\IncompleteAddressException;
 use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
 use RoundlyConsulting\Addresses\Exceptions\InvalidCountryException;
+use RoundlyConsulting\Addresses\Exceptions\TrashedAddressException;
 
 it('builds each typed exception under the base hierarchy', function () {
     $exceptions = [
@@ -14,6 +15,7 @@ it('builds each typed exception under the base hierarchy', function () {
         InvalidCountryException::for('XX1'),
         IncompleteAddressException::missing(['city', 'street']),
         AddressOwnershipException::make(),
+        TrashedAddressException::cannotBePrimary(),
     ];
 
     foreach ($exceptions as $exception) {

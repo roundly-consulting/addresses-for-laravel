@@ -15,7 +15,6 @@ use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Database\Factories\AddressFactory;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Events\AddressDeleted;
-use RoundlyConsulting\Addresses\Events\PrimaryAddressChanged;
 
 /**
  * @property int $id
@@ -153,28 +152,5 @@ class Address extends Model
     {
         return $this->addressable_type === $addressable->getMorphClass()
             && (string) $this->addressable_id === (string) $addressable->getKey();
-    }
-
-    /**
-     * Mark this address as the primary one for its addressable + type, demoting
-     * any siblings. Passing false simply demotes every address in the group.
-     *
-     * @internal the primary invariant behind the actions; promote an address with
-     *           `Addresses::for($owner)->setPrimary($address)`
-     */
-    public function markAsPrimary(bool $isPrimary = true): void
-    {
-        $this->newModelQuery()
-            ->when($isPrimary, fn ($query) => $query->where('id', '!=', $this->id))
-            ->where('addressable_type', $this->addressable_type)
-            ->where('addressable_id', $this->addressable_id)
-            ->where('type', $this->type->value)
-            ->update(['is_primary' => false]);
-
-        if ($isPrimary && ! $this->is_primary) {
-            $this->update(['is_primary' => true]);
-
-            PrimaryAddressChanged::dispatch($this);
-        }
     }
 }
