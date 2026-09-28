@@ -25,7 +25,8 @@ final class PendingAddress
 
     private ?string $name = null;
 
-    private AddressType $type = AddressType::Default;
+    /** Null until `type()` is called: the address then gets `addresses.default_type`. */
+    private ?AddressType $type = null;
 
     private bool $isPrimary = false;
 

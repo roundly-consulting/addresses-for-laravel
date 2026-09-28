@@ -43,6 +43,7 @@ trait HasAddresses
     }
 
     /**
+     * @param  AddressType|null  $type  null falls back to `addresses.default_type`
      * @param  Collection<array-key, mixed>|null  $meta
      */
     public function createAddress(
@@ -52,7 +53,7 @@ trait HasAddresses
         string $countryIsoCode,
         ?string $name = null,
         bool $isPrimary = false,
-        AddressType $type = AddressType::Default,
+        ?AddressType $type = null,
         ?Collection $meta = null,
     ): Address {
         return $this->addAddress(AddressData::make(

@@ -6,14 +6,21 @@ namespace RoundlyConsulting\Addresses\DataTransferObjects;
 
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
 use RoundlyConsulting\Addresses\Exceptions\InvalidCountryException;
 use RoundlyConsulting\Addresses\Support\CountryNormaliser;
+use RoundlyConsulting\Addresses\Support\DefaultAddressType;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 
 final readonly class AddressData
 {
+    public AddressType $type;
+
     /**
+     * @param  AddressType|null  $type  null falls back to `addresses.default_type`
      * @param  Collection<array-key, mixed>|null  $meta
+     *
+     * @throws InvalidAddressTypeException when no type is given and the configured default is not an AddressType
      */
     public function __construct(
         public string $city,
@@ -21,18 +28,22 @@ final readonly class AddressData
         public string $postalCode,
         public string $countryIso,
         public ?string $name = null,
-        public AddressType $type = AddressType::Default,
+        ?AddressType $type = null,
         public bool $isPrimary = false,
         public ?Collection $meta = null,
-    ) {}
+    ) {
+        $this->type = $type ?? DefaultAddressType::resolve();
+    }
 
     /**
      * Named-argument-friendly factory that trims string fields and, when
      * country normalisation is enabled, normalises the country code on the way in.
      *
+     * @param  AddressType|null  $type  null falls back to `addresses.default_type`
      * @param  Collection<array-key, mixed>|null  $meta
      *
      * @throws InvalidCountryException when normalisation is on and the code is not two or three letters
+     * @throws InvalidAddressTypeException when no type is given and the configured default is not an AddressType
      */
     public static function make(
         string $city,
@@ -40,7 +51,7 @@ final readonly class AddressData
         string $postalCode,
         string $countryIso,
         ?string $name = null,
-        AddressType $type = AddressType::Default,
+        ?AddressType $type = null,
         bool $isPrimary = false,
         ?Collection $meta = null,
     ): self {
