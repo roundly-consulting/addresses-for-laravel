@@ -303,8 +303,11 @@ The facade is sugar over the injectable `AddressManager`; each use case is also 
 class. All three run the same code:
 
 ```php
+use App\Models\User;
 use RoundlyConsulting\Addresses\Actions\CreateAddressAction;
+use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\AddressManager;
+use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 
 final class SaveBillingAddress
 {
