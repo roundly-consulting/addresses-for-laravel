@@ -4,19 +4,23 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses;
 
+use Closure;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\MorphTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Database\Factories\AddressFactory;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Events\AddressDeleted;
+use RoundlyConsulting\Addresses\Support\PrimaryGroup;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
+use Throwable;
 
 /**
  * @property int $id
@@ -43,7 +47,9 @@ class Address extends Model
     /** @use HasFactory<AddressFactory> */
     use HasFactory;
 
-    use SoftDeletes;
+    use SoftDeletes {
+        restore as private restoreTrashed;
+    }
 
     /** @var list<string> */
     protected $guarded = [];
@@ -65,6 +71,69 @@ class Address extends Model
         static::deleted(function (Address $address): void {
             AddressDeleted::dispatch($address);
         });
+    }
+
+    /**
+     * Restore a soft-deleted address. Deleting the primary keeps its flag, so a restore undoes
+     * the delete — while the owner + type group has no other live primary. When one holds the
+     * slot by now, the address comes back as a plain one: a promotion already demoted it, or
+     * a primary was written past the promotion (a direct write, a factory) and this restore
+     * yields to it. The flag is read from the stored row under a lock on the group, so it
+     * serialises with promotions; on PostgreSQL and SQLite a racing primary that lock could
+     * not see is refused by the one-primary index, and the restore retries against it.
+     */
+    public function restore(): bool
+    {
+        $attributes = $this->getAttributes();
+        $original = $this->getRawOriginal();
+
+        // Each attempt, a cancelled restore and a failed one all start from (or end at) the
+        // model as it was handed in.
+        $reset = fn (): static => $this->setRawAttributes($original, true)->setRawAttributes($attributes);
+
+        try {
+            try {
+                $restored = $this->restoreOnce($reset);
+            } catch (UniqueConstraintViolationException) {
+                $restored = $this->restoreOnce($reset);
+            }
+        } catch (Throwable $exception) {
+            $reset();
+
+            throw $exception;
+        }
+
+        if (! $restored) {
+            $reset();
+        }
+
+        return $restored;
+    }
+
+    /**
+     * @param  Closure(): static  $reset
+     */
+    private function restoreOnce(Closure $reset): bool
+    {
+        return $this->getConnection()->transaction(function () use ($reset): bool {
+            $reset();
+
+            $stored = $this->newModelQuery()->whereKey($this->getKey())->first();
+
+            if ($stored instanceof self) {
+                $locked = $stored->trashed() && $stored->is_primary ? PrimaryGroup::lock($stored) : null;
+                $self = $locked?->first(fn (Address $row): bool => $row->is($stored)) ?? $stored;
+                $taken = $locked?->contains(fn (Address $row): bool => ! $row->is($stored) && $row->is_primary && ! $row->trashed()) ?? false;
+
+                // The stored flag becomes the original, whatever the caller's copy says, so the
+                // restore's own save writes a yield — and a cancelled restore writes nothing.
+                $this->forceFill(['is_primary' => $self->is_primary])
+                    ->syncOriginalAttribute('is_primary')
+                    ->forceFill(['is_primary' => $self->is_primary && ! $taken]);
+            }
+
+            return (bool) $this->restoreTrashed();
+        }, 3);
     }
 
     protected static function newFactory(): AddressFactory

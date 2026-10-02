@@ -32,7 +32,9 @@ return new class extends Migration
     }
 
     /**
-     * At most one primary per owner + type, enforced by the engine.
+     * At most one live primary per owner + type, enforced by the engine. Trashed rows hold no
+     * slot: a deleted primary keeps its flag so a restore can undo the delete, and the
+     * model's restore() brings it back plain when another primary holds the slot by then.
      *
      * Promotion locks the owner's type group, which serialises it on MySQL/MariaDB and SQL
      * Server: their locking reads wait on a racing transaction's uncommitted rows. Postgres's
@@ -52,11 +54,12 @@ return new class extends Migration
         $grammar = $connection->getQueryGrammar();
 
         $connection->statement(sprintf(
-            'create unique index %s on %s (%s) where %s',
+            'create unique index %s on %s (%s) where %s and %s is null',
             $grammar->wrap($connection->getTablePrefix().'addresses_one_primary_per_type'),
             $grammar->wrapTable('addresses'),
             $grammar->columnize(['addressable_type', 'addressable_id', 'type']),
             $grammar->wrap('is_primary'),
+            $grammar->wrap('deleted_at'),
         ));
     }
 };

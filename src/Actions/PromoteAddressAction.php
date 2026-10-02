@@ -4,13 +4,13 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses\Actions;
 
-use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\UniqueConstraintViolationException;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
 use RoundlyConsulting\Addresses\Exceptions\TrashedAddressException;
+use RoundlyConsulting\Addresses\Support\PrimaryGroup;
 
 /**
  * Makes an address the one primary of its owner + type group, demoting the rest — in one
@@ -55,14 +55,7 @@ final readonly class PromoteAddressAction
                 throw AddressOwnershipException::make();
             }
 
-            $group = $this->group($stored);
-
-            // Lock the whole group in key order, so concurrent promotions queue up behind one
-            // another instead of deadlocking.
-            $locked = (clone $group)
-                ->orderBy($stored->getKeyName())
-                ->lockForUpdate()
-                ->get([$stored->getKeyName(), 'is_primary', $stored->getDeletedAtColumn()]);
+            $locked = PrimaryGroup::lock($stored);
 
             $self = $locked->first(fn (Address $row): bool => $row->is($stored)) ?? throw $this->notFound($stored);
 
@@ -70,7 +63,8 @@ final readonly class PromoteAddressAction
                 throw TrashedAddressException::cannotBePrimary();
             }
 
-            (clone $group)
+            // Deleted primaries are demoted too: one superseded here comes back plain on restore.
+            PrimaryGroup::of($stored)
                 ->whereKeyNot($stored->getKey())
                 ->where('is_primary', true)
                 ->update(['is_primary' => false]);
@@ -94,20 +88,6 @@ final readonly class PromoteAddressAction
     {
         return $address->newModelQuery()->whereKey($address->getKey())->first()
             ?? throw $this->notFound($address);
-    }
-
-    /**
-     * Every row of the owner + type group, trashed ones included: the one-primary guarantee
-     * spans them all, so a restored address can never bring a second primary back.
-     *
-     * @return Builder<Address>
-     */
-    private function group(Address $stored): Builder
-    {
-        return $stored->newModelQuery()
-            ->where('addressable_type', $stored->addressable_type)
-            ->where('addressable_id', $stored->addressable_id)
-            ->where('type', $stored->getRawOriginal('type'));
     }
 
     /**

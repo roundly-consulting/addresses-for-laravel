@@ -271,3 +271,143 @@ describe('the promotion guard', function (): void {
             ->and(primaryIds($victim))->toBe([$victimPrimary->id]);
     });
 });
+
+/**
+ * Runs `$then` once, right after a restore has read and locked its owner + type group — the
+ * point where a racing primary its lock could not see would slip in.
+ */
+function afterLockingTheGroup(Closure $then): Closure
+{
+    $fired = false;
+
+    DB::listen(function (QueryExecuted $query) use (&$fired, $then): void {
+        $sql = strtolower($query->sql);
+
+        if ($fired || ! str_starts_with($sql, 'select') || ! str_contains($sql, 'order by')) {
+            return;
+        }
+
+        $fired = true;
+        $then();
+    });
+
+    return function () use (&$fired): bool {
+        return $fired;
+    };
+}
+
+describe('a deleted primary', function (): void {
+    it('holds no primary slot, so a primary written past the promotion is accepted', function (): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        Addresses::delete($deleted);
+
+        $fresh = groupAddress($owner, primary: true);
+
+        expect(Addresses::for($owner)->primary(AddressType::Shipping)?->is($fresh))->toBeTrue();
+    });
+
+    it('comes back as the primary when its group has none', function (): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        groupAddress($owner);
+        Addresses::delete($deleted);
+
+        expect($deleted->restore())->toBeTrue()
+            ->and(primaryIds($owner))->toBe([$deleted->id])
+            ->and(Addresses::for($owner)->primary(AddressType::Shipping)?->is($deleted))->toBeTrue();
+    });
+
+    it('comes back as a plain address once another was promoted', function (Closure $promote): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        $target = groupAddress($owner);
+        Addresses::delete($deleted);
+
+        $promoted = $promote($owner, $target);
+        $deleted->restore();
+
+        expect(primaryIds($owner))->toBe([$promoted->id])
+            ->and($deleted->trashed())->toBeFalse()
+            ->and($deleted->is_primary)->toBeFalse();
+    })->with([
+        'setPrimary()' => [fn (TestModel $owner, Address $target): Address => Addresses::for($owner)->setPrimary($target)],
+        'update(isPrimary: true)' => [fn (TestModel $owner, Address $target): Address => Addresses::update($target, primaryData())],
+        'add(isPrimary: true)' => [fn (TestModel $owner): Address => Addresses::for($owner)->add(primaryData())],
+    ]);
+
+    it('comes back as a plain address when a primary was written past the promotion meanwhile', function (Closure $restore): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        Addresses::delete($deleted);
+        $fresh = groupAddress($owner, primary: true);
+
+        $restore($deleted);
+
+        expect(primaryIds($owner))->toBe([$fresh->id])
+            ->and(Address::query()->find($deleted->id)?->is_primary)->toBeFalse()
+            ->and($deleted->trashed())->toBeFalse()
+            ->and($deleted->is_primary)->toBeFalse()
+            ->and($deleted->isDirty())->toBeFalse();
+    })->with([
+        'restore()' => [fn (Address $address): bool => $address->restore()],
+        'restoreQuietly()' => [fn (Address $address): bool => $address->restoreQuietly()],
+        'a copy that thinks it is plain' => [function (Address $address): bool {
+            $address->forceFill(['is_primary' => false])->syncOriginalAttribute('is_primary');
+
+            return $address->restore();
+        }],
+    ]);
+
+    it('retries a restore that loses the race to a concurrent primary', function (): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        Addresses::delete($deleted);
+
+        // The interleaving Postgres allows: a racing transaction commits a live primary the
+        // restore's lock could not see, so the restore collides with it and must yield.
+        $fired = afterLockingTheGroup(fn () => DB::table('addresses')->insert([
+            'addressable_type' => TestModel::class,
+            'addressable_id' => $owner->id,
+            'type' => AddressType::Shipping->value,
+            'is_primary' => true,
+            'city' => 'Racer',
+        ]));
+
+        expect($deleted->restore())->toBeTrue()
+            ->and($fired())->toBeTrue()
+            ->and($deleted->trashed())->toBeFalse()
+            ->and(Address::query()->whereKey($deleted->id)->exists())->toBeTrue();
+    });
+
+    it('writes nothing when a listener cancels the restore', function (): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        Addresses::delete($deleted);
+        $fresh = groupAddress($owner, primary: true);
+        Address::restoring(fn (): bool => false);
+
+        $stored = fn (): ?Address => Address::withTrashed()->find($deleted->id);
+
+        expect($deleted->restore())->toBeFalse()
+            ->and($deleted->trashed())->toBeTrue()
+            ->and($deleted->is_primary)->toBeTrue()
+            ->and($stored()?->trashed())->toBeTrue()
+            ->and($stored()?->is_primary)->toBeTrue()
+            ->and(primaryIds($owner))->toBe([$deleted->id, $fresh->id]);
+    });
+
+    it('rolls the yield back with the restore when the restore fails', function (): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, primary: true);
+        Addresses::delete($deleted);
+        groupAddress($owner, primary: true);
+        Address::restored(fn () => throw new RuntimeException('listener failed'));
+
+        expect(fn () => $deleted->restore())->toThrow(RuntimeException::class, 'listener failed')
+            ->and($deleted->trashed())->toBeTrue()
+            ->and($deleted->is_primary)->toBeTrue()
+            ->and(Address::withTrashed()->find($deleted->id)?->is_primary)->toBeTrue()
+            ->and(Address::withTrashed()->find($deleted->id)?->trashed())->toBeTrue();
+    });
+});
