@@ -216,7 +216,8 @@ An owner has at most one primary address per type. Promoting one — through `se
 or by adding/updating an address with `isPrimary: true` / `->primary()` — demotes the others in
 the same owner + type group, in one transaction under a lock on the group, so a failure half-way
 leaves the old primary in place and two concurrent promotions cannot both win. On PostgreSQL and
-SQLite a partial unique index also makes a second primary impossible at the database level.
+SQLite a partial unique index also makes a second live primary impossible at the database level
+(soft-deleted rows hold no slot).
 
 The book refuses an address that belongs to another owner (`AddressOwnershipException`) and a
 soft-deleted one (`TrashedAddressException` — restore it first). Both are checked against the
@@ -241,6 +242,10 @@ Addresses::delete($address);                    // soft delete, dispatches Addre
 
 `update()` overwrites the address with the data you pass, including its flag: `isPrimary: true`
 promotes it, and leaving `isPrimary` out (it defaults to `false`) demotes it.
+
+Deleting the primary leaves its type without one until you promote another. The deleted address
+keeps its flag, so `$address->restore()` undoes the delete — it comes back as the primary only
+while its owner + type group has no other live primary; otherwise it returns as a plain address.
 
 ### Format an address
 

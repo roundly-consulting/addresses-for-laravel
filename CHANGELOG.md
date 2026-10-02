@@ -23,7 +23,8 @@ Initial public release.
 - At most one primary address per owner and type. Every promotion (`setPrimary()`, adding or
   updating with `isPrimary: true`) runs in one transaction under a lock on the owner's type
   group, reads ownership and trash state from the stored row, and on PostgreSQL and SQLite a
-  partial unique index makes a second primary impossible.
+  partial unique index makes a second live primary impossible. A deleted primary keeps its flag,
+  so `restore()` undoes the delete — as a plain address when another primary holds the slot.
 - Model shortcuts on `HasAddresses` (`newAddress()`, `addAddress()`, `createAddress()`,
   `primaryAddress()`, `getPrimaryAddressOfType()`, `setPrimaryAddress()`, `addressBook()`, …)
   that delegate to the address book.
