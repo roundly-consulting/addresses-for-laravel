@@ -28,7 +28,8 @@ return [
     | The key type used for the polymorphic addressable column. Use "uuid" or
     | "ulid" when the models that own addresses use UUID/ULID primary keys,
     | otherwise leave it as "bigint". Your addressable models must share one key
-    | type; set this to match them. Any unrecognized value falls back to "bigint".
+    | type; set this to match them. Any other value throws an
+    | InvalidConfigurationException when the migration runs.
     |
     | Supported: "bigint", "uuid", "ulid"
     |
