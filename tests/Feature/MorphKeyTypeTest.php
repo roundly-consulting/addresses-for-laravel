@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\Testing\Database\DriverMatrix;
 
 /**
@@ -78,14 +79,14 @@ it('renders each configured key type as a distinct real morph column type', func
     'ulid' => ['ulid', 'character(26)'],
 ])->skip($pgsqlOnly, 'needs the postgres catalog to tell the key types apart');
 
-it('falls back to the bigint morph schema for an unrecognized key type', function (): void {
+it('refuses to migrate on an unrecognized key type instead of falling back to bigint', function (): void {
     config()->set('addresses.key_type', 'nonsense');
 
     Schema::dropIfExists('addresses');
-    runAddressesMigration();
 
-    // A typo in a host's config must never leave the package unable to migrate.
-    expect(Schema::hasColumn('addresses', 'addressable_id'))->toBeTrue()
-        ->and(DriverMatrix::driver() === 'pgsql' ? pgsqlAddressesColumnType('addresses', 'addressable_id') : 'bigint')
-        ->toBe('bigint');
+    // A typo in a host's config must stop the migration, never silently build bigint
+    // columns for a uuid/ulid-keyed host.
+    expect(function (): void {
+        runAddressesMigration();
+    })->toThrow(InvalidConfigurationException::class, 'Configuration value [addresses.key_type] must be one of [bigint, uuid, ulid] (case-insensitive), [nonsense] given.');
 });
