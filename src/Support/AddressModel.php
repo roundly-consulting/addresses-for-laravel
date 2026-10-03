@@ -10,10 +10,9 @@ use RoundlyConsulting\PackageToolkit\Support\ModelResolver;
 /**
  * Resolves the Eloquent model backing addresses from `addresses.model`.
  *
- * The toolkit's ModelResolver validates that the configured value is a real
- * Eloquent model; anything that is not an Address (so it cannot answer the
- * package's scopes, primary-address invariant or country accessor) falls back
- * to the packaged model.
+ * Absent config resolves the packaged model; anything else must be that model or a subclass of
+ * it, or the toolkit's ModelResolver throws InvalidConfigurationException naming the key — a
+ * foreign class is never silently replaced.
  */
 final class AddressModel
 {
@@ -22,8 +21,6 @@ final class AddressModel
      */
     public static function class(): string
     {
-        $model = ModelResolver::for('addresses.model', Address::class);
-
-        return is_a($model, Address::class, true) ? $model : Address::class;
+        return ModelResolver::for('addresses.model', Address::class);
     }
 }

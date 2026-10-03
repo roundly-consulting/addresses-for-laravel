@@ -18,10 +18,14 @@ it('resolves a configured host subclass', function (): void {
     expect(AddressModel::class())->toBe(CustomAddress::class);
 });
 
-it('falls back to the packaged model for a model that is not an address', function (): void {
+it('refuses a foreign model instead of falling back to the packaged one', function (): void {
+    // The toolkit refuses any class that is not the packaged model or a subclass of it.
     config()->set('addresses.model', TestModel::class);
 
-    expect(AddressModel::class())->toBe(Address::class);
+    expect(fn (): string => AddressModel::class())->toThrow(
+        InvalidConfigurationException::class,
+        'Configuration value [addresses.model] must be a class-string of ['.Address::class.'], ['.TestModel::class.'] given.',
+    );
 });
 
 it('rejects a configured class that is not an eloquent model', function (): void {
