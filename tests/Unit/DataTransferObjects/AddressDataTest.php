@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 
 it('normalises the country and trims string fields', function () {
     $data = AddressData::make(
@@ -59,6 +60,13 @@ it('skips normalisation when disabled', function () {
     );
 
     expect($data->countryIso)->toBe('sk');
+});
+
+it('refuses a mistyped normalisation switch (strict config)', function () {
+    config()->set('addresses.normalise_country', 'disabled');
+
+    expect(fn () => AddressData::make(city: 'A', street: 'B', postalCode: 'C', countryIso: ' sk '))
+        ->toThrow(InvalidConfigurationException::class, 'Configuration value [addresses.normalise_country] must be a boolean');
 });
 
 it('maps to write attributes', function () {
