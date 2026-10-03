@@ -44,8 +44,9 @@ return [
     |
     | The AddressType value an address gets when its creator names none — the
     | fluent builder without type(), AddressData without a type, and
-    | createAddress() without one. A value that is not an AddressType case
-    | throws InvalidAddressTypeException when such an address is built.
+    | createAddress() without one. Null or blank means "default"; any other
+    | value that is not an AddressType case throws InvalidAddressTypeException
+    | when such an address is built.
     |
     | Supported: "default", "billing", "shipping", "home", "work", "office"
     |
@@ -77,8 +78,8 @@ return [
     | RoundlyConsulting\Addresses\Contracts\CountryResolver. When set, the
     | package resolves country names (and lets you geocode) through it. The
     | package bundles no implementation and makes no network calls itself.
-    | Any value other than null must name such a class, or resolving it throws
-    | an InvalidConfigurationException.
+    | Null or blank binds none; any other value must name such a class, or
+    | resolving it throws an InvalidConfigurationException.
     |
     */
 
@@ -91,6 +92,7 @@ return [
     |
     | The class alias registered for the Addresses facade. Set to null (or
     | false) to skip registering a global alias, or to a string to rename it.
+    | A blank value is not set and keeps the "Addresses" alias.
     |
     */
 

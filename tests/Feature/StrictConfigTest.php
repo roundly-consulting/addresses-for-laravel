@@ -29,19 +29,21 @@ it('refuses a country resolver that is not a CountryResolver class (strict confi
     expect(fn () => Addresses::countryName('sk'))
         ->toThrow(InvalidConfigurationException::class, 'Configuration value [addresses.country_resolver] must be a class-string of ['.CountryResolver::class.']');
 })->with([
-    'blank' => '',
     'missing class' => 'App\\Support\\MissingResolver',
     'not a resolver' => TestModel::class,
     'not a string' => [['App\\Support\\Resolver']],
     'bool' => true,
 ]);
 
-it('binds no resolver when none is configured (strict config)', function (): void {
-    registerAddressesWithResolver(null);
+it('binds no resolver when none is set (strict config)', function (?string $resolver): void {
+    registerAddressesWithResolver($resolver);
+
+    Artisan::call('about', ['--only' => 'addresses']);
 
     expect(app()->bound(CountryResolver::class))->toBeFalse()
-        ->and(Addresses::countryName('sk'))->toBe('SK');
-});
+        ->and(Addresses::countryName('sk'))->toBe('SK')
+        ->and(Artisan::output())->toMatch('/Country resolver \.+ NONE/');
+})->with(['absent' => null, 'blank' => '', 'whitespace' => '  ']);
 
 it('keeps the about section rendering on a malformed host config (strict config)', function (): void {
     config()->set('addresses.country_resolver', TestModel::class);
@@ -73,3 +75,12 @@ it('reports an unparseable facade alias switch as invalid (strict config)', func
 
     expect(Artisan::output())->toMatch('/Facade alias \.+ INVALID/');
 });
+
+it('reports the declared facade alias when the switch is blank (strict config)', function (string $alias): void {
+    config()->set('addresses.facade_alias', $alias);
+
+    Artisan::call('about', ['--only' => 'addresses']);
+
+    expect(Artisan::output())->toMatch('/Facade alias \.+ Addresses/')
+        ->not->toContain('DISABLED');
+})->with(['blank' => '', 'whitespace' => '  ']);

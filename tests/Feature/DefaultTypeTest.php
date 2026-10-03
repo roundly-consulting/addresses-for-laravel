@@ -53,12 +53,12 @@ it('accepts the default type as an enum case or a padded, upper-case value', fun
     'padded upper-case string' => [' SHIPPING '],
 ]);
 
-it('uses the Default type when the key is unset', function (): void {
-    config()->set('addresses.default_type', null);
+it('uses the Default type when the key is not set', function (?string $configured): void {
+    config()->set('addresses.default_type', $configured);
 
     expect(AddressData::make(city: 'A', street: 'B', postalCode: 'C', countryIso: 'SK')->type)
         ->toBe(AddressType::Default);
-});
+})->with(['absent' => null, 'empty string' => '', 'blank string' => '  ']);
 
 it('refuses a default type that is not an AddressType (strict config)', function (mixed $configured): void {
     config()->set('addresses.default_type', $configured);
@@ -67,6 +67,5 @@ it('refuses a default type that is not an AddressType (strict config)', function
 })->with([
     'unknown value' => ['warehouse'],
     'not a string' => [42],
-    'empty string' => [''],
-    'blank string' => ['  '],
+    'typo' => ['shiping'],
 ])->throws(InvalidAddressTypeException::class);

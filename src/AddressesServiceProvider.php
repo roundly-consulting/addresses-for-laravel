@@ -58,16 +58,16 @@ final class AddressesServiceProvider extends PackageServiceProvider
     }
 
     /**
-     * Bind a host-provided CountryResolver only when one is configured. The
-     * package never ships a default that touches the network.
+     * Bind a host-provided CountryResolver only when one is set (a blank value is not
+     * set, exactly like null). The package never ships a default that touches the network.
      *
-     * Any configured value is bound, and checked when the resolver is first
-     * resolved: it must name a CountryResolver class, or the read throws naming the
-     * key — a typo never silently leaves country names unresolved.
+     * Any other value is bound, and checked when the resolver is first resolved: it
+     * must name a CountryResolver class, or the read throws naming the key — a typo
+     * never silently leaves country names unresolved.
      */
     private function registerCountryResolver(): void
     {
-        if (config('addresses.country_resolver') === null) {
+        if (self::resolverIsUnset()) {
             return;
         }
 
@@ -90,6 +90,16 @@ final class AddressesServiceProvider extends PackageServiceProvider
         return $resolver;
     }
 
+    /**
+     * Not set: absent, null or blank (`''` or whitespace, a host's `KEY=`).
+     */
+    private static function resolverIsUnset(): bool
+    {
+        $resolver = config('addresses.country_resolver');
+
+        return $resolver === null || (is_string($resolver) && trim($resolver) === '');
+    }
+
     private static function defaultType(): string
     {
         try {
@@ -101,7 +111,7 @@ final class AddressesServiceProvider extends PackageServiceProvider
 
     private static function resolverName(): string
     {
-        if (config('addresses.country_resolver') === null) {
+        if (self::resolverIsUnset()) {
             return 'NONE';
         }
 
