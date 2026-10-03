@@ -77,6 +77,8 @@ return [
     | RoundlyConsulting\Addresses\Contracts\CountryResolver. When set, the
     | package resolves country names (and lets you geocode) through it. The
     | package bundles no implementation and makes no network calls itself.
+    | Any value other than null must name such a class, or resolving it throws
+    | an InvalidConfigurationException.
     |
     */
 

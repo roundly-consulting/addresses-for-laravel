@@ -9,8 +9,9 @@ use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
 
 /**
  * The AddressType an address gets when its creator names none: `addresses.default_type`,
- * falling back to `AddressType::Default` when the key is unset. A value that is not an
- * AddressType fails loudly rather than quietly storing a type nobody configured.
+ * or `AddressType::Default` when the key is unset (null). Any present value that is not an
+ * AddressType — an unknown name, a blank string, a non-string — fails loudly rather than
+ * quietly storing a type nobody configured.
  */
 final class DefaultAddressType
 {
@@ -25,7 +26,7 @@ final class DefaultAddressType
             return $configured;
         }
 
-        if ($configured === null || $configured === '') {
+        if ($configured === null) {
             return AddressType::Default;
         }
 

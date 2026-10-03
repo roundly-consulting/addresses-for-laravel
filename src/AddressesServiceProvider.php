@@ -4,10 +4,14 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses;
 
+use Illuminate\Contracts\Foundation\Application;
 use RoundlyConsulting\Addresses\Contracts\CountryResolver;
+use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
 use RoundlyConsulting\Addresses\Facades\Addresses;
 use RoundlyConsulting\Addresses\Support\AddressModel;
+use RoundlyConsulting\Addresses\Support\DefaultAddressType;
 use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
+use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
 use RoundlyConsulting\PackageToolkit\Package;
 use RoundlyConsulting\PackageToolkit\PackageServiceProvider;
 use RoundlyConsulting\PackageToolkit\Support\Config;
@@ -56,38 +60,76 @@ final class AddressesServiceProvider extends PackageServiceProvider
     /**
      * Bind a host-provided CountryResolver only when one is configured. The
      * package never ships a default that touches the network.
+     *
+     * Any configured value is bound, and checked when the resolver is first
+     * resolved: it must name a CountryResolver class, or the read throws naming the
+     * key — a typo never silently leaves country names unresolved.
      */
     private function registerCountryResolver(): void
     {
-        $resolver = config('addresses.country_resolver');
-
-        if (! is_string($resolver) || $resolver === '') {
+        if (config('addresses.country_resolver') === null) {
             return;
         }
 
-        /** @var class-string<CountryResolver> $resolver */
-        $this->app->singleton(CountryResolver::class, $resolver);
+        $this->app->singleton(CountryResolver::class, static fn (Application $app): CountryResolver => $app->make(self::resolverClass()));
+    }
+
+    /**
+     * @return class-string<CountryResolver>
+     *
+     * @throws InvalidConfigurationException
+     */
+    private static function resolverClass(): string
+    {
+        $resolver = config('addresses.country_resolver');
+
+        if (! is_string($resolver) || ! class_exists($resolver) || ! is_a($resolver, CountryResolver::class, true)) {
+            throw InvalidConfigurationException::notAnImplementation('addresses.country_resolver', CountryResolver::class, $resolver);
+        }
+
+        return $resolver;
     }
 
     private static function defaultType(): string
     {
-        $type = config('addresses.default_type');
-
-        return is_string($type) && $type !== '' ? $type : 'default';
+        try {
+            return DefaultAddressType::resolve()->value;
+        } catch (InvalidAddressTypeException) {
+            return 'INVALID';
+        }
     }
 
     private static function resolverName(): string
     {
-        $resolver = config('addresses.country_resolver');
+        if (config('addresses.country_resolver') === null) {
+            return 'NONE';
+        }
 
-        return is_string($resolver) && $resolver !== '' ? class_basename($resolver) : 'NONE';
+        try {
+            return class_basename(self::resolverClass());
+        } catch (InvalidConfigurationException) {
+            return 'INVALID';
+        }
     }
 
+    /**
+     * The alias the toolkit registers for `addresses.facade_alias`: null or a false
+     * spelling skips it, a true spelling keeps the declared `Addresses`, any other string
+     * renames it.
+     */
     private static function aliasName(): string
     {
-        $alias = config('addresses.facade_alias');
+        $alias = config('addresses.facade_alias', true);
 
-        return is_string($alias) && $alias !== '' ? $alias : 'DISABLED';
+        if (is_string($alias) && filter_var($alias, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE) === null) {
+            return $alias;
+        }
+
+        try {
+            return $alias !== null && Config::boolean('addresses.facade_alias', true) ? 'Addresses' : 'DISABLED';
+        } catch (InvalidConfigurationException) {
+            return 'INVALID';
+        }
     }
 
     private static function switch(string $key, bool $default): string
