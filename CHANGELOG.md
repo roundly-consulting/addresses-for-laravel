@@ -6,6 +6,14 @@ All notable changes to `addresses-for-laravel` are documented in this file. The 
 
 ## Unreleased
 
+## 1.0.1 - 2026-10-05
+
+### Changed
+
+- Documentation: the README hero image uses an absolute URL, so it renders on Packagist and other
+  sites.
+- Maintenance: `composer.json` `homepage` and `support.docs` link to the package documentation.
+
 ### Fixed
 
 - `AddressCreated`, `AddressUpdated`, `AddressDeleted` and `PrimaryAddressChanged` implement
