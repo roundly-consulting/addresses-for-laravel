@@ -104,3 +104,13 @@ it('reads an env-string normalisation switch the way the package applies it', fu
 
     expect(addressesAboutOutput())->toMatch('/Normalise country\W+OFF/');
 });
+
+it('reports an invalid model or normalisation switch as INVALID instead of throwing', function (string $key, mixed $value, string $row): void {
+    config()->set($key, $value);
+
+    expect(addressesAboutOutput())->toMatch("/{$row}\\W+INVALID/")
+        ->toContain('Table');
+})->with([
+    'normalise_country' => ['addresses.normalise_country', 'disabled', 'Normalise country'],
+    'model' => ['addresses.model', stdClass::class, 'Model'],
+]);

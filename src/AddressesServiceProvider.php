@@ -30,7 +30,7 @@ final class AddressesServiceProvider extends PackageServiceProvider
             ->contributesToAbout(static fn (): array => [
                 // The resolver is a host class name, so only its base name shows;
                 // no config value here is a credential or a destination.
-                'Model' => class_basename(AddressModel::class()),
+                'Model' => self::modelName(),
                 'Table' => 'addresses',
                 'Default type' => self::defaultType(),
                 'Normalise country' => self::switch('addresses.normalise_country', true),
@@ -100,6 +100,15 @@ final class AddressesServiceProvider extends PackageServiceProvider
         return $resolver === null || (is_string($resolver) && trim($resolver) === '');
     }
 
+    private static function modelName(): string
+    {
+        try {
+            return class_basename(AddressModel::class());
+        } catch (InvalidConfigurationException) {
+            return 'INVALID';
+        }
+    }
+
     private static function defaultType(): string
     {
         try {
@@ -144,6 +153,10 @@ final class AddressesServiceProvider extends PackageServiceProvider
 
     private static function switch(string $key, bool $default): string
     {
-        return Config::boolean($key, $default) ? 'ON' : 'OFF';
+        try {
+            return Config::boolean($key, $default) ? 'ON' : 'OFF';
+        } catch (InvalidConfigurationException) {
+            return 'INVALID';
+        }
     }
 }
