@@ -63,7 +63,7 @@ final class AddressesFake extends AddressManager
     public function update(Address $address, AddressData $data): Address
     {
         if ($data->isPrimary) {
-            $this->refuseTrashed($address);
+            $this->refuseTrashed($address, $this->stored($address));
         }
 
         $this->updated[] = ['address' => $address, 'data' => $data];
@@ -116,13 +116,15 @@ final class AddressesFake extends AddressManager
 
     public function setPrimaryFor(Model $addressable, Address $address): Address
     {
-        if (! $address->isOwnedBy($addressable)) {
+        $stored = $this->stored($address);
+
+        if (! $address->isOwnedBy($addressable) || ! $stored->isOwnedBy($addressable)) {
             throw AddressOwnershipException::make();
         }
 
-        $this->refuseTrashed($address);
+        $this->refuseTrashed($address, $stored);
 
-        $this->primaries[$this->group($address)] = $address;
+        $this->primaries[$this->group($stored)] = $address;
         $address->forceFill(['is_primary' => true]);
 
         $this->promoted[] = ['owner' => $this->identify($addressable), 'address' => $address];
@@ -296,11 +298,30 @@ final class AddressesFake extends AddressManager
     }
 
     /**
+     * The address as the real promotion reads it: the stored row, trashed or not — so its
+     * owner and trash state are current, never the caller's copy — under the type the fake's
+     * own update gave it. An address that is not stored (one added through the fake) is its
+     * own record.
+     */
+    private function stored(Address $address): Address
+    {
+        $row = $address->exists ? $address->newModelQuery()->whereKey($address->getKey())->first() : null;
+
+        if (! $row instanceof Address) {
+            return $address;
+        }
+
+        $updated = $this->replaced[$this->key($address)] ?? null;
+
+        return $updated instanceof Address ? $row->forceFill(['type' => $updated->type]) : $row;
+    }
+
+    /**
      * @throws TrashedAddressException
      */
-    private function refuseTrashed(Address $address): void
+    private function refuseTrashed(Address $address, Address $stored): void
     {
-        if ($address->trashed() || $this->wasDeleted($address)) {
+        if ($stored->trashed() || $this->wasDeleted($address)) {
             throw TrashedAddressException::cannotBePrimary();
         }
     }

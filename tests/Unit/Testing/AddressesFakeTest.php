@@ -242,6 +242,7 @@ it('refuses to promote a trashed address, like the real manager', function (Clos
     $fake->assertNothingPrimarySet();
 })->with([
     'soft-deleted in the database' => [fn (Address $address) => $address->delete()],
+    'soft-deleted behind the copy' => [fn (Address $address) => Address::query()->whereKey($address->id)->delete()],
     'deleted through the fake' => [fn (Address $address) => Addresses::delete($address)],
 ]);
 
@@ -289,3 +290,47 @@ it('updates the passed instance and returns it, so later calls and reads see it,
     'added through the fake' => [fn (TestModel $owner): Address => $owner->newAddress()->at('Main 1')->in('Bratislava')->postalCode('81101')->country('SK')->save()],
     'stored' => [fn (TestModel $owner): Address => storedAddress($owner)],
 ]);
+
+it('refuses an update that would promote an address soft-deleted behind the copy', function (): void {
+    $owner = TestModel::create();
+    $address = storedAddress($owner);
+    $fake = Addresses::fake();
+    Address::query()->whereKey($address->id)->delete();
+
+    expect(fn () => Addresses::update($address, fakeAddress(primary: true)))->toThrow(TrashedAddressException::class);
+    $fake->assertNothingUpdated();
+});
+
+it('promotes in the stored type group when the type changed behind the copy, like the real manager', function (): void {
+    $owner = TestModel::create();
+    $address = storedAddress($owner);
+    Addresses::fake();
+    Address::query()->whereKey($address->id)->update(['type' => AddressType::Billing->value]);
+
+    Addresses::for($owner)->setPrimary($address);
+
+    expect(Addresses::for($owner)->primary(AddressType::Billing)?->is($address))->toBeTrue()
+        ->and(Addresses::for($owner)->primary(AddressType::Default))->toBeNull();
+});
+
+it('refuses an address moved to another owner behind the copy, like the real manager', function (): void {
+    $owner = TestModel::create();
+    $address = storedAddress($owner);
+    $fake = Addresses::fake();
+    Address::query()->whereKey($address->id)->update(['addressable_id' => TestModel::create()->id]);
+
+    expect(fn () => Addresses::for($owner)->setPrimary($address))->toThrow(AddressOwnershipException::class);
+    $fake->assertNothingPrimarySet();
+});
+
+it('promotes in the type an update through the fake gave the address, like the real manager', function (): void {
+    $owner = TestModel::create();
+    $address = storedAddress($owner);
+    Addresses::fake();
+    Addresses::update(Address::query()->findOrFail($address->id), fakeAddress(AddressType::Billing));
+
+    Addresses::for($owner)->setPrimary($address);
+
+    expect(Addresses::for($owner)->primary(AddressType::Billing)?->is($address))->toBeTrue()
+        ->and(Addresses::for($owner)->primary(AddressType::Default))->toBeNull();
+});
