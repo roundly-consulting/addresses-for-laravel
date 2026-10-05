@@ -79,6 +79,22 @@ it('reads through the swapped model in manager queries', function (): void {
         ->and(Address::class)->not->toBe(CustomAddress::class);
 });
 
+/**
+ * The factory the package ships is part of the seam: a host test seeding through it must get
+ * rows made as its own model — counted on the subclass, so its events and casts ran — whether
+ * it calls the factory on the subclass or on the packaged model.
+ */
+it('builds the host address model from the packaged factory', function (): void {
+    expect('addresses.model')->toHonourModelSwap(CustomAddress::class, function (): array {
+        $owner = ['addressable_id' => TestModel::create()->id, 'addressable_type' => TestModel::class];
+
+        return [
+            CustomAddress::factory()->create($owner),
+            Address::factory()->primary()->create($owner),
+        ];
+    });
+});
+
 // The structural half of the seam — Address is non-final, and `addresses.model` really
 // defaults to the packaged model — is pinned once in tests/ArchTest.php by
 // `ArchPresets::swappableModelsAreNotFinal()`. It deliberately does NOT live here: that

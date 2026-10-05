@@ -7,6 +7,7 @@ namespace RoundlyConsulting\Addresses\Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\Enums\AddressType;
+use RoundlyConsulting\Addresses\Support\AddressModel;
 
 /**
  * @extends Factory<Address>
@@ -15,6 +16,18 @@ final class AddressFactory extends Factory
 {
     /** @var class-string<Address> */
     protected $model = Address::class;
+
+    /**
+     * Build the model the host configured, not the packaged one: a host that points
+     * `addresses.model` at its own subclass gets that subclass, with its casts, events and
+     * observers, out of the factory the package ships.
+     *
+     * @return class-string<Address>
+     */
+    public function modelName(): string
+    {
+        return AddressModel::class();
+    }
 
     /** @return array<model-property<Address>, mixed> */
     public function definition(): array
