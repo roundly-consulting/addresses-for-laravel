@@ -41,4 +41,27 @@ final class PrimaryGroup
             ->lockForUpdate()
             ->get([$stored->getKeyName(), 'is_primary', $stored->getDeletedAtColumn()]);
     }
+
+    /**
+     * Lock the group of a row read without a lock, and return the row as it stands with the
+     * group it is in. The unlocked read keeps every caller locking in key order, but a write
+     * committed between that read and the lock can move the row to another group (a new type
+     * or owner): then the group just locked no longer holds it. The row is read again under
+     * its own lock, which pins its group, and that group is locked instead. A row that is
+     * gone by then comes back with the group it left, so the caller finds it missing there.
+     *
+     * @return array{0: Address, 1: Collection<int, Address>} the row as current, and its locked group
+     */
+    public static function lockWith(Address $stored): array
+    {
+        $group = self::lock($stored);
+
+        if ($group->contains(fn (Address $row): bool => $row->is($stored))) {
+            return [$stored, $group];
+        }
+
+        $moved = $stored->newModelQuery()->whereKey($stored->getKey())->lockForUpdate()->first();
+
+        return $moved instanceof Address ? [$moved, self::lock($moved)] : [$stored, $group];
+    }
 }

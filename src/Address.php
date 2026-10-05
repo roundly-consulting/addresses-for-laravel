@@ -121,7 +121,12 @@ class Address extends Model
             $stored = $this->newModelQuery()->whereKey($this->getKey())->first();
 
             if ($stored instanceof self) {
-                $locked = $stored->trashed() && $stored->is_primary ? PrimaryGroup::lock($stored) : null;
+                $locked = null;
+
+                if ($stored->trashed() && $stored->is_primary) {
+                    [$stored, $locked] = PrimaryGroup::lockWith($stored);
+                }
+
                 $self = $locked?->first(fn (Address $row): bool => $row->is($stored)) ?? $stored;
                 $taken = $locked?->contains(fn (Address $row): bool => ! $row->is($stored) && $row->is_primary && ! $row->trashed()) ?? false;
 

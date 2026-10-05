@@ -51,11 +51,13 @@ final readonly class PromoteAddressAction
         return $address->getConnection()->transaction(function () use ($address, $owner): bool {
             $stored = $this->stored($address);
 
-            if ($owner instanceof Model && ! $stored->isOwnedBy($owner)) {
-                throw AddressOwnershipException::make();
-            }
+            $this->refuseForeign($stored, $owner);
 
-            $locked = PrimaryGroup::lock($stored);
+            // A row moved to another group meanwhile is read again, and may belong to
+            // someone else by now.
+            [$stored, $locked] = PrimaryGroup::lockWith($stored);
+
+            $this->refuseForeign($stored, $owner);
 
             $self = $locked->first(fn (Address $row): bool => $row->is($stored)) ?? throw $this->notFound($stored);
 
@@ -79,6 +81,16 @@ final readonly class PromoteAddressAction
 
             return true;
         }, 3);
+    }
+
+    /**
+     * @throws AddressOwnershipException when `$owner` is given and the stored row is not theirs
+     */
+    private function refuseForeign(Address $stored, ?Model $owner): void
+    {
+        if ($owner instanceof Model && ! $stored->isOwnedBy($owner)) {
+            throw AddressOwnershipException::make();
+        }
     }
 
     /**

@@ -2,10 +2,13 @@
 
 declare(strict_types=1);
 
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Database\Events\QueryExecuted;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Schema;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
@@ -409,5 +412,77 @@ describe('a deleted primary', function (): void {
             ->and($deleted->is_primary)->toBeTrue()
             ->and(Address::withTrashed()->find($deleted->id)?->is_primary)->toBeTrue()
             ->and(Address::withTrashed()->find($deleted->id)?->trashed())->toBeTrue();
+    });
+});
+
+/**
+ * Runs `$then` once, right after the first read of `$address`'s row by key — the window
+ * between that unlocked read and the lock on the group it names, where a concurrent write
+ * can move the row to another group. One process cannot run two transactions at once, so a
+ * write on the same connection at that point is the closest deterministic stand-in.
+ */
+function afterReadingTheRow(Address $address, Closure $then): void
+{
+    $fired = false;
+
+    DB::listen(function (QueryExecuted $query) use (&$fired, $then, $address): void {
+        $sql = strtolower($query->sql);
+
+        if ($fired || ! str_starts_with($sql, 'select *') || ! str_contains($sql, 'addresses') || $query->bindings != [$address->getKey()]) {
+            return;
+        }
+
+        $fired = true;
+        $then();
+    });
+}
+
+describe('a row that moves group between its read and the group lock', function (): void {
+    it('is promoted in the group it moved to', function (): void {
+        $owner = TestModel::create();
+        $billing = groupAddress($owner, AddressType::Billing, primary: true);
+        $address = groupAddress($owner, AddressType::Default);
+        afterReadingTheRow($address, fn () => DB::table('addresses')->where('id', $address->id)->update(['type' => AddressType::Billing->value]));
+
+        Addresses::for($owner)->setPrimary($address);
+
+        expect(primaryIds($owner, AddressType::Billing))->toBe([$address->id])
+            ->and($billing->fresh()?->is_primary)->toBeFalse();
+    });
+
+    it('is refused once it moved to another owner', function (): void {
+        $owner = TestModel::create();
+        $address = groupAddress($owner);
+        $other = TestModel::create();
+        afterReadingTheRow($address, fn () => DB::table('addresses')->where('id', $address->id)->update(['addressable_id' => $other->id]));
+
+        expect(fn () => Addresses::for($owner)->setPrimary($address))->toThrow(AddressOwnershipException::class)
+            ->and(primaryIds($other))->toBe([]);
+    });
+
+    it('is not found once it is gone', function (): void {
+        $owner = TestModel::create();
+        $address = groupAddress($owner);
+        afterReadingTheRow($address, fn () => DB::table('addresses')->where('id', $address->id)->delete());
+
+        Addresses::for($owner)->setPrimary($address);
+    })->throws(ModelNotFoundException::class);
+
+    it('is restored against the group it moved to, keeping one primary there', function (): void {
+        $owner = TestModel::create();
+        $deleted = groupAddress($owner, AddressType::Default, primary: true);
+        Addresses::delete($deleted);
+        $shipping = groupAddress($owner, primary: true);
+
+        // The MySQL shape: no one-primary index, so only the lock keeps a second primary out.
+        if (Schema::hasIndex('addresses', 'addresses_one_primary_per_type')) {
+            Schema::table('addresses', fn (Blueprint $table) => $table->dropIndex('addresses_one_primary_per_type'));
+        }
+
+        afterReadingTheRow($deleted, fn () => DB::table('addresses')->where('id', $deleted->id)->update(['type' => AddressType::Shipping->value]));
+
+        expect($deleted->restore())->toBeTrue()
+            ->and($deleted->is_primary)->toBeFalse()
+            ->and(primaryIds($owner))->toBe([$shipping->id]);
     });
 });
