@@ -17,6 +17,7 @@ use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Database\Factories\AddressFactory;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Events\AddressDeleted;
+use RoundlyConsulting\Addresses\Events\PrimaryAddressChanged;
 use RoundlyConsulting\Addresses\Support\PrimaryGroup;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
@@ -71,6 +72,14 @@ class Address extends Model
         static::deleted(function (Address $address): void {
             AddressDeleted::dispatch($address);
         });
+
+        // A model event, like `deleted` above: a quiet restore stays quiet, and one that
+        // rolls back never announces itself (the event waits for the commit).
+        static::restored(function (Address $address): void {
+            if ($address->is_primary) {
+                PrimaryAddressChanged::dispatch($address);
+            }
+        });
     }
 
     /**
@@ -80,7 +89,8 @@ class Address extends Model
      * a primary was written past the promotion (a direct write, a factory) and this restore
      * yields to it. The flag is read from the stored row under a lock on the group, so it
      * serialises with promotions; on PostgreSQL and SQLite a racing primary that lock could
-     * not see is refused by the one-primary index, and the restore retries against it.
+     * not see is refused by the one-primary index, and the restore retries against it. A
+     * restore that brings the address back as the primary dispatches PrimaryAddressChanged.
      */
     public function restore(): bool
     {

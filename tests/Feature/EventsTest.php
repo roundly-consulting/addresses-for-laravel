@@ -150,3 +150,76 @@ it('dispatches every event at once when there is no outer transaction', function
 
     expect($log->getArrayCopy())->toBe(everyAddressEvent());
 });
+
+function deletedBillingPrimary(TestModel $entity): Address
+{
+    $address = Addresses::for($entity)->add(AddressData::make(
+        city: 'Bratislava',
+        street: 'Main 1',
+        postalCode: '81101',
+        countryIso: 'SK',
+        type: AddressType::Billing,
+        isPrimary: true,
+    ));
+
+    Addresses::delete($address);
+
+    return $address;
+}
+
+describe('restoring a deleted primary', function (): void {
+    it('dispatches primary changed once when the address comes back as the primary', function (): void {
+        $address = deletedBillingPrimary($entity = TestModel::create());
+        Event::fake([PrimaryAddressChanged::class]);
+
+        expect($address->restore())->toBeTrue()
+            ->and(Addresses::for($entity)->primary(AddressType::Billing)?->is($address))->toBeTrue();
+
+        Event::assertDispatchedTimes(PrimaryAddressChanged::class, 1);
+        Event::assertDispatched(PrimaryAddressChanged::class, fn (PrimaryAddressChanged $event): bool => $event->address === $address && $event->address->is_primary);
+    });
+
+    it('dispatches nothing when the address does not come back as the primary, or comes back quietly', function (Closure $prepare, Closure $restore): void {
+        $address = deletedBillingPrimary($entity = TestModel::create());
+        $prepare($entity);
+        $log = listenToAddressEvents();
+
+        expect($restore($address))->toBeTrue()
+            ->and($log->getArrayCopy())->toBe([]);
+    })->with([
+        'another primary took the slot' => [
+            fn (TestModel $entity): Address => Addresses::for($entity)->add(AddressData::make(city: 'Kosice', street: 'Main 2', postalCode: '04001', countryIso: 'SK', type: AddressType::Billing, isPrimary: true)),
+            function (Address $address): bool {
+                $restored = $address->restore();
+
+                expect($address->is_primary)->toBeFalse();
+
+                return $restored;
+            },
+        ],
+        'restoreQuietly()' => [
+            fn (): null => null,
+            function (Address $address): bool {
+                $restored = $address->restoreQuietly();
+
+                expect($address->fresh()?->is_primary)->toBeTrue();
+
+                return $restored;
+            },
+        ],
+    ]);
+
+    it('dispatches nothing for a restore a host transaction rolls back', function (): void {
+        $address = deletedBillingPrimary(TestModel::create());
+        $log = listenToAddressEvents();
+
+        expect(fn () => DB::transaction(function () use ($address): void {
+            $address->restore();
+
+            throw new RuntimeException('host rollback');
+        }))->toThrow(RuntimeException::class, 'host rollback');
+
+        expect($log->getArrayCopy())->toBe([])
+            ->and(Address::withTrashed()->findOrFail($address->id)->trashed())->toBeTrue();
+    });
+});
