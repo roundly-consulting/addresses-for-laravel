@@ -68,16 +68,22 @@ final class AddressesFake extends AddressManager
 
         $this->updated[] = ['address' => $address, 'data' => $data];
 
-        $updated = (clone $address)->forceFill($data->toAttributes());
-
         $this->release($address);
-        $this->swap($address, $updated);
 
-        if ($data->isPrimary) {
-            $this->primaries[$this->group($updated)] = $updated;
+        // The passed instance itself, as the real manager updates and returns it: an address
+        // added through the fake is already this object in the fake's list, so a second
+        // update or a delete through the same variable reaches what the reads answer with.
+        $address->forceFill($data->toAttributes());
+
+        if ($address->exists) {
+            $this->replaced[$this->key($address)] = $address;
         }
 
-        return $updated;
+        if ($data->isPrimary) {
+            $this->primaries[$this->group($address)] = $address;
+        }
+
+        return $address;
     }
 
     public function delete(Address $address): void
@@ -285,25 +291,6 @@ final class AddressesFake extends AddressManager
         foreach ($this->primaries as $group => $primary) {
             if ($primary instanceof Address && $this->same($primary, $address)) {
                 $this->primaries[$group] = null;
-            }
-        }
-    }
-
-    /**
-     * Put an updated copy where the original was: in the stored overlay, or in the list of
-     * addresses added through the fake.
-     */
-    private function swap(Address $original, Address $updated): void
-    {
-        if ($original->exists) {
-            $this->replaced[$this->key($original)] = $updated;
-
-            return;
-        }
-
-        foreach ($this->added as $index => $added) {
-            if ($added['address'] === $original) {
-                $this->added[$index]['address'] = $updated;
             }
         }
     }

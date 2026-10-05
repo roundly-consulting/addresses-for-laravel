@@ -266,3 +266,26 @@ it('applies updates to addresses added through the fake', function (): void {
         ->and($updated->city)->toBe('Zilina')
         ->and(Addresses::for($owner)->primary())->toBeNull();
 });
+
+it('updates the passed instance and returns it, so later calls and reads see it, like the real manager', function (Closure $address): void {
+    $owner = TestModel::create();
+    $fake = Addresses::fake();
+    $address = $address($owner);
+
+    $updated = Addresses::update($address, fakeAddress(primary: true, city: 'Kosice'));
+    Addresses::update($address, fakeAddress(primary: true, city: 'Zilina'));
+
+    expect($updated)->toBe($address)
+        ->and($address->city)->toBe('Zilina')
+        ->and(Addresses::for($owner)->all()->pluck('city')->all())->toBe(['Zilina'])
+        ->and(Addresses::for($owner)->primary()?->city)->toBe('Zilina');
+
+    Addresses::delete($address);
+
+    expect(Addresses::for($owner)->all())->toBeEmpty()
+        ->and(Addresses::for($owner)->primary())->toBeNull();
+    $fake->assertUpdated($address, fn (AddressData $data): bool => $data->city === 'Zilina');
+})->with([
+    'added through the fake' => [fn (TestModel $owner): Address => $owner->newAddress()->at('Main 1')->in('Bratislava')->postalCode('81101')->country('SK')->save()],
+    'stored' => [fn (TestModel $owner): Address => storedAddress($owner)],
+]);
