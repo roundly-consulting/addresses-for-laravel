@@ -60,6 +60,8 @@ final readonly class UpdateAddressAction
      */
     private function write(Address $address, AddressData $data): bool
     {
+        $this->rebase($address);
+
         $attributes = $data->toAttributes();
         unset($attributes['is_primary']);
 
@@ -73,5 +75,26 @@ final readonly class UpdateAddressAction
         $address->update($attributes);
 
         return $data->isPrimary && $this->promote->execute($address);
+    }
+
+    /**
+     * Re-base the caller's copy on the stored row, read under a lock, keeping the caller's
+     * own unsaved changes on top. A stale copy would otherwise be compared against its old
+     * values: a DTO value it already holds is not dirty and never reaches the database (a
+     * primary flag set elsewhere is never cleared), and the type-group check would read a
+     * type the row no longer has. An address that is not stored is left as it is.
+     */
+    private function rebase(Address $address): void
+    {
+        $stored = $address->newModelQuery()->whereKey($address->getKey())->lockForUpdate()->first();
+
+        if (! $stored instanceof Address) {
+            return;
+        }
+
+        $unsaved = $address->getDirty();
+
+        $address->setRawAttributes($stored->getAttributes(), true)
+            ->setRawAttributes([...$stored->getAttributes(), ...$unsaved]);
     }
 }
