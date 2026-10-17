@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses\Tests;
 
-use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use RoundlyConsulting\Addresses\AddressesServiceProvider;
 use RoundlyConsulting\Testing\PackageTestCase;
@@ -28,26 +26,25 @@ abstract class TestCase extends PackageTestCase
      * The addresses migration, named by **provider class** rather than by the directory it
      * happens to sit in: the base case reflects on the provider to find its
      * `database/migrations`, so a relocated directory can never silently stop being loaded.
+     * Then the fixture owner table (`test_models`) — a migration source rather than a
+     * `Schema::create()` after the migrate, so the kept schema holds it too.
      *
      * @return list<class-string<ServiceProvider>|string>
      */
     protected function migrationSources(): array
     {
-        return [AddressesServiceProvider::class];
+        return [
+            AddressesServiceProvider::class,
+            __DIR__.'/database/migrations',
+        ];
     }
 
     /**
-     * The host-owned entity addresses hang off. It is an ad-hoc `Schema::create()` rather
-     * than a migration on purpose: `addressable` is a polymorphic, deliberately
-     * unconstrained morph, so the owner's table is the host's business and nothing here is
-     * shipped schema with an order to pin.
+     * Migrate once per worker and schema signature; each test still starts on empty tables
+     * with the key counters where a fresh migrate leaves them.
      */
-    protected function defineDatabaseMigrations(): void
+    protected function keepsMigratedSchema(): bool
     {
-        parent::defineDatabaseMigrations();
-
-        Schema::create('test_models', function (Blueprint $table): void {
-            $table->increments('id');
-        });
+        return true;
     }
 }
