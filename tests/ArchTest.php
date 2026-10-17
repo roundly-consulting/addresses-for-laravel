@@ -48,6 +48,13 @@ ArchPresets::noLocalCryptoPrimitives('RoundlyConsulting\Addresses');
 ArchPresets::modelsResolveThroughSeam(__DIR__.'/../src', 'Support');
 
 /**
+ * The factory half of the seam: AddressFactory returns the AddressModel seam from
+ * `modelName()`, so a host that swapped `addresses.model` gets its own rows (and events)
+ * out of `Address::factory()`. Already true; this keeps it true.
+ */
+ArchPresets::factoriesResolveThroughSeam(__DIR__.'/../database/factories', __DIR__.'/../src', 'Support');
+
+/**
  * The Dependency Policy as a test. No `alsoAllow`: addresses' `require` ships only
  * php/illuminate/roundly, and the workflow installs test tooling with `--dev`, so nothing
  * legitimately lands in `require` that this must forgive. If this goes red, the graph is
