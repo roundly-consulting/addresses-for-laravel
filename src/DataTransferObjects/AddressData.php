@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace RoundlyConsulting\Addresses\DataTransferObjects;
 
 use Illuminate\Support\Collection;
+use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
 use RoundlyConsulting\Addresses\Exceptions\InvalidCountryException;
@@ -73,7 +74,7 @@ final readonly class AddressData
      * The attributes used to write the underlying model. A framework-shaped
      * array (an Eloquent write payload), which the standard explicitly allows.
      *
-     * @return array<string, mixed>
+     * @return array<model-property<Address>, mixed>
      */
     public function toAttributes(): array
     {
