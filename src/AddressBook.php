@@ -62,6 +62,29 @@ final readonly class AddressBook
     }
 
     /**
+     * Overwrite one of this owner's addresses with new data, as `Addresses::update()` does —
+     * after checking, against the stored row, that the address is this owner's (morph type
+     * and key) and that the write does not hand it to another owner.
+     *
+     * @throws AddressOwnershipException when the address belongs to another owner
+     */
+    public function update(Address $address, AddressData $data): Address
+    {
+        return $this->addresses->updateFor($this->addressable, $address, $data);
+    }
+
+    /**
+     * Soft-delete one of this owner's addresses, as `Addresses::delete()` does — after
+     * checking, against the stored row, that the address is this owner's.
+     *
+     * @throws AddressOwnershipException when the address belongs to another owner
+     */
+    public function delete(Address $address): void
+    {
+        $this->addresses->deleteFor($this->addressable, $address);
+    }
+
+    /**
      * Promote one of this owner's addresses to primary within its type group.
      *
      * @throws AddressOwnershipException when the address belongs to another owner

@@ -114,13 +114,25 @@ final class AddressesFake extends AddressManager
         return $address;
     }
 
+    public function updateFor(Model $addressable, Address $address, AddressData $data): Address
+    {
+        $this->refuseForeign($addressable, $address, $this->stored($address));
+
+        return $this->update($address, $data);
+    }
+
+    public function deleteFor(Model $addressable, Address $address): void
+    {
+        $this->refuseForeign($addressable, $address, $this->stored($address));
+
+        $this->delete($address);
+    }
+
     public function setPrimaryFor(Model $addressable, Address $address): Address
     {
         $stored = $this->stored($address);
 
-        if (! $address->isOwnedBy($addressable) || ! $stored->isOwnedBy($addressable)) {
-            throw AddressOwnershipException::make();
-        }
+        $this->refuseForeign($addressable, $address, $stored);
 
         $this->refuseTrashed($address, $stored);
 
@@ -314,6 +326,19 @@ final class AddressesFake extends AddressManager
         $updated = $this->replaced[$this->key($address)] ?? null;
 
         return $updated instanceof Address ? $row->forceFill(['type' => $updated->type]) : $row;
+    }
+
+    /**
+     * Both the caller's copy and the stored row must be the owner's, as the real manager
+     * checks them.
+     *
+     * @throws AddressOwnershipException
+     */
+    private function refuseForeign(Model $addressable, Address $address, Address $stored): void
+    {
+        if (! $address->isOwnedBy($addressable) || ! $stored->isOwnedBy($addressable)) {
+            throw AddressOwnershipException::make();
+        }
     }
 
     /**

@@ -4,16 +4,22 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses\Actions;
 
+use Illuminate\Database\Eloquent\Model;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Events\AddressUpdated;
 use RoundlyConsulting\Addresses\Events\PrimaryAddressChanged;
+use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
 use RoundlyConsulting\Addresses\Exceptions\TrashedAddressException;
 use Throwable;
 
 /**
  * Overwrites an address with new data; a primary flag promotes it within its type group,
  * and no flag demotes it. The write and the promotion commit together, or not at all.
+ *
+ * Given an owner, the address must be theirs before and after the write: the stored row is
+ * read under a lock and compared by morph type and key, and the caller's copy must not move
+ * it to another owner. Without one, any address is updated (`Addresses::update()`).
  */
 final readonly class UpdateAddressAction
 {
@@ -23,8 +29,9 @@ final readonly class UpdateAddressAction
 
     /**
      * @throws TrashedAddressException when a deleted address is asked to become primary
+     * @throws AddressOwnershipException when `$owner` is given and the address is not theirs
      */
-    public function execute(Address $address, AddressData $data): Address
+    public function execute(Address $address, AddressData $data, ?Model $owner = null): Address
     {
         $attributesBefore = $address->getAttributes();
         $originalBefore = $address->getRawOriginal();
@@ -35,10 +42,10 @@ final readonly class UpdateAddressAction
         $restore = static fn () => $address->setRawAttributes($originalBefore, true)->setRawAttributes($attributesBefore);
 
         try {
-            $promoted = $address->getConnection()->transaction(function () use ($address, $data, $restore): bool {
+            $promoted = $address->getConnection()->transaction(function () use ($address, $data, $owner, $restore): bool {
                 $restore();
 
-                return $this->write($address, $data);
+                return $this->write($address, $data, $owner);
             }, 3);
         } catch (Throwable $exception) {
             $restore();
@@ -58,9 +65,13 @@ final readonly class UpdateAddressAction
     /**
      * @return bool whether the address became primary
      */
-    private function write(Address $address, AddressData $data): bool
+    private function write(Address $address, AddressData $data, ?Model $owner): bool
     {
-        $this->rebase($address);
+        $stored = $this->rebase($address);
+
+        if ($owner instanceof Model && (! $address->isOwnedBy($owner) || ($stored instanceof Address && ! $stored->isOwnedBy($owner)))) {
+            throw AddressOwnershipException::make();
+        }
 
         $attributes = $data->toAttributes();
         unset($attributes['is_primary']);
@@ -74,7 +85,7 @@ final readonly class UpdateAddressAction
 
         $address->update($attributes);
 
-        return $data->isPrimary && $this->promote->execute($address);
+        return $data->isPrimary && $this->promote->execute($address, $owner);
     }
 
     /**
@@ -83,18 +94,22 @@ final readonly class UpdateAddressAction
      * values: a DTO value it already holds is not dirty and never reaches the database (a
      * primary flag set elsewhere is never cleared), and the type-group check would read a
      * type the row no longer has. An address that is not stored is left as it is.
+     *
+     * @return Address|null the stored row, read under the lock; null when there is none
      */
-    private function rebase(Address $address): void
+    private function rebase(Address $address): ?Address
     {
         $stored = $address->newModelQuery()->whereKey($address->getKey())->lockForUpdate()->first();
 
         if (! $stored instanceof Address) {
-            return;
+            return null;
         }
 
         $unsaved = $address->getDirty();
 
         $address->setRawAttributes($stored->getAttributes(), true)
             ->setRawAttributes([...$stored->getAttributes(), ...$unsaved]);
+
+        return $stored;
     }
 }

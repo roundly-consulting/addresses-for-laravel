@@ -334,3 +334,37 @@ it('promotes in the type an update through the fake gave the address, like the r
     expect(Addresses::for($owner)->primary(AddressType::Billing)?->is($address))->toBeTrue()
         ->and(Addresses::for($owner)->primary(AddressType::Default))->toBeNull();
 });
+
+it('records owner-scoped updates and deletes, and refuses another owner\'s address', function (): void {
+    $owner = TestModel::create();
+    $mine = storedAddress($owner);
+    $theirs = storedAddress(TestModel::create());
+    $fake = Addresses::fake();
+
+    Addresses::for($owner)->update($mine, fakeAddress(city: 'Nitra'));
+    Addresses::for($owner)->delete($mine);
+
+    $fake->assertUpdated($mine, fn (AddressData $data): bool => $data->city === 'Nitra');
+    $fake->assertDeleted($mine);
+
+    expect(fn () => Addresses::for($owner)->update($theirs, fakeAddress()))->toThrow(AddressOwnershipException::class)
+        ->and(fn () => Addresses::for($owner)->delete($theirs))->toThrow(AddressOwnershipException::class)
+        ->and(fn () => $fake->assertUpdated($theirs))->toThrow(ExpectationFailedException::class)
+        ->and(fn () => $fake->assertDeleted($theirs))->toThrow(ExpectationFailedException::class)
+        ->and($mine->fresh()?->trashed())->toBeFalse()
+        ->and($mine->fresh()?->city)->not->toBe('Nitra');
+});
+
+it('scopes an address added through the fake to its owner', function (): void {
+    $owner = TestModel::create();
+    $fake = Addresses::fake();
+    $added = Addresses::for($owner)->add(fakeAddress());
+
+    expect(fn () => Addresses::for(TestModel::create())->delete($added))->toThrow(AddressOwnershipException::class);
+
+    $fake->assertNothingDeleted();
+
+    Addresses::for($owner)->delete($added);
+
+    $fake->assertDeleted($added);
+});

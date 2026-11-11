@@ -85,6 +85,22 @@ class AddressManager
     }
 
     /**
+     * @internal the body of `for($addressable)->update()`
+     */
+    public function updateFor(Model $addressable, Address $address, AddressData $data): Address
+    {
+        return $this->container->make(UpdateAddressAction::class)->execute($address, $data, owner: $addressable);
+    }
+
+    /**
+     * @internal the body of `for($addressable)->delete()`
+     */
+    public function deleteFor(Model $addressable, Address $address): void
+    {
+        $this->container->make(DeleteAddressAction::class)->execute($address, owner: $addressable);
+    }
+
+    /**
      * @internal the body of `for($addressable)->setPrimary()`
      */
     public function setPrimaryFor(Model $addressable, Address $address): Address

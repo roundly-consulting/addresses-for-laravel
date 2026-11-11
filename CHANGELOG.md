@@ -6,6 +6,15 @@ All notable changes to `addresses-for-laravel` are documented in this file. The 
 
 ## Unreleased
 
+### Added
+
+- `Addresses::for($owner)->update($address, $data)` and `Addresses::for($owner)->delete($address)`: owner-checked
+  writes. They refuse an address that belongs to another owner (compared by morph type and key, read from the stored
+  row under a lock, so a forged or stale copy does not get through) with `AddressOwnershipException`, the exception
+  `Addresses::for($owner)->setPrimary()` already throws. An update that would move the address to another owner is
+  refused too. `Addresses::update()` and `Addresses::delete()` stay unscoped. `Addresses::fake()` records the scoped
+  calls for `assertUpdated()` / `assertDeleted()` and refuses the same addresses.
+
 ## 2.0.0 - 2026-11-07
 
 ### Changed
