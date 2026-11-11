@@ -88,6 +88,8 @@ it('renders the addresses section without leaking the addresses it stores', func
         mustRender: [
             'Model',
             'Table',
+            'Types',
+            'default, billing, shipping, home, work, office',
             'Default type',
             'Normalise country',
             'Country resolver',
@@ -113,4 +115,14 @@ it('reports an invalid model or normalisation switch as INVALID instead of throw
 })->with([
     'normalise_country' => ['addresses.normalise_country', 'disabled', 'Normalise country'],
     'model' => ['addresses.model', stdClass::class, 'Model'],
+    'types' => ['addresses.types', 42, 'Types'],
+    'default type outside the types' => ['addresses.types', ['registered'], 'Default type'],
 ]);
+
+it('reports the configured types and a custom default type', function (): void {
+    config()->set('addresses.types', ['registered', 'postal' => 'Postal address']);
+    config()->set('addresses.default_type', 'postal');
+
+    expect(addressesAboutOutput())->toMatch('/Types\W+registered, postal/')
+        ->toMatch('/Default type\W+postal/');
+});

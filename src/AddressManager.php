@@ -16,6 +16,7 @@ use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Support\AddressModel;
+use RoundlyConsulting\Addresses\Support\AddressTypes;
 
 /**
  * The root of the `Addresses` facade: an owner's address book (`for()`), plus the
@@ -69,6 +70,25 @@ class AddressManager
         return $this->container->make(CountryResolver::class)->name($iso) ?? $iso;
     }
 
+    /**
+     * The address types configured in `addresses.types` (the six AddressType values unless
+     * the app lists its own), as stored keys.
+     *
+     * @return list<string>
+     */
+    public function types(): array
+    {
+        return AddressTypes::keys();
+    }
+
+    /**
+     * A type's display label: configured, translated, or a headline of the key.
+     */
+    public function typeLabel(AddressType|string $type): string
+    {
+        return AddressTypes::label($type);
+    }
+
     /*
      * The operations behind for(). They are public only so the address book can reach
      * them, and @internal so the facade never documents them. They are also the ONE place
@@ -111,11 +131,11 @@ class AddressManager
     /**
      * @internal the body of `for($addressable)->primary()`
      */
-    public function primaryFor(Model $addressable, ?AddressType $type = null): ?Address
+    public function primaryFor(Model $addressable, AddressType|string|null $type = null): ?Address
     {
         return $this->query($addressable)
             ->where('is_primary', true)
-            ->when($type instanceof AddressType, fn (Builder $query) => $query->where('type', $type?->value))
+            ->when($type !== null, fn (Builder $query) => $query->where('type', AddressTypes::key($type ?? '')))
             ->first();
     }
 
@@ -124,10 +144,10 @@ class AddressManager
      *
      * @return Collection<int, Address>
      */
-    public function ofTypeFor(Model $addressable, AddressType $type): Collection
+    public function ofTypeFor(Model $addressable, AddressType|string $type): Collection
     {
         return $this->query($addressable)
-            ->where('type', $type->value)
+            ->where('type', AddressTypes::key($type))
             ->get();
     }
 

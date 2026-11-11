@@ -39,16 +39,46 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Address Types
+    |--------------------------------------------------------------------------
+    |
+    | The address types your application allows. Every write (AddressData, the
+    | fluent builder, createAddress(), assigning $address->type, the
+    | ValidAddressType rule) refuses a type not listed here with an
+    | InvalidAddressTypeException. Reads are not checked, so rows of a type you
+    | later remove stay readable.
+    |
+    | The six AddressType values ship by default. Replace or extend the list
+    | with your own lowercase keys (letters, digits, "-" and "_"); a built-in
+    | key reads back as its AddressType case, a custom one as the string.
+    | Give an entry a label as "key => 'Label'" or "key => ['label' => '…']";
+    | otherwise the addresses::types translation, then a headline of the key
+    | ("head_office" => "Head Office"), is used.
+    |
+    | Example:
+    |   'types' => ['default', 'billing', 'registered' => 'Registered office', 'postal'],
+    |
+    */
+
+    'types' => [
+        AddressType::Default->value,
+        AddressType::Billing->value,
+        AddressType::Shipping->value,
+        AddressType::Home->value,
+        AddressType::Work->value,
+        AddressType::Office->value,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Default Address Type
     |--------------------------------------------------------------------------
     |
-    | The AddressType value an address gets when its creator names none — the
-    | fluent builder without type(), AddressData without a type, and
-    | createAddress() without one. Null or blank means "default"; any other
-    | value that is not an AddressType case throws InvalidAddressTypeException
-    | when such an address is built.
-    |
-    | Supported: "default", "billing", "shipping", "home", "work", "office"
+    | The type an address gets when its creator names none — the fluent builder
+    | without type(), AddressData without a type, and createAddress() without
+    | one. Null or blank means "default"; any other value must be one of the
+    | types above, or building such an address throws
+    | InvalidAddressTypeException.
     |
     */
 

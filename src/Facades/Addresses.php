@@ -10,6 +10,7 @@ use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\AddressBook;
 use RoundlyConsulting\Addresses\AddressManager;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
+use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Testing\AddressesFake;
 
 /**
@@ -17,6 +18,8 @@ use RoundlyConsulting\Addresses\Testing\AddressesFake;
  * @method static Address update(Address $address, AddressData $data)
  * @method static void delete(Address $address)
  * @method static string countryName(string $iso)
+ * @method static list<string> types()
+ * @method static string typeLabel(AddressType|string $type)
  *
  * @see AddressManager
  */

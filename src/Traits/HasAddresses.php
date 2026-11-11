@@ -30,20 +30,20 @@ trait HasAddresses
         return $this->morphMany(AddressModel::class(), 'addressable');
     }
 
-    public function getAddressOfType(AddressType $type, bool $onlyPrimary = false): ?Address
+    public function getAddressOfType(AddressType|string $type, bool $onlyPrimary = false): ?Address
     {
         return $onlyPrimary
             ? $this->getPrimaryAddressOfType($type)
             : $this->addressBook()->ofType($type)->first();
     }
 
-    public function getPrimaryAddressOfType(AddressType $type): ?Address
+    public function getPrimaryAddressOfType(AddressType|string $type): ?Address
     {
         return $this->addressBook()->primary($type);
     }
 
     /**
-     * @param  AddressType|null  $type  null falls back to `addresses.default_type`
+     * @param  AddressType|string|null  $type  a type configured in `addresses.types`; null falls back to `addresses.default_type`
      * @param  Collection<array-key, mixed>|null  $meta
      */
     public function createAddress(
@@ -53,7 +53,7 @@ trait HasAddresses
         string $countryIsoCode,
         ?string $name = null,
         bool $isPrimary = false,
-        ?AddressType $type = null,
+        AddressType|string|null $type = null,
         ?Collection $meta = null,
     ): Address {
         return $this->addAddress(AddressData::make(
@@ -81,7 +81,7 @@ trait HasAddresses
     /**
      * The primary address, optionally scoped to a type.
      */
-    public function primaryAddress(?AddressType $type = null): ?Address
+    public function primaryAddress(AddressType|string|null $type = null): ?Address
     {
         return $this->addressBook()->primary($type);
     }
@@ -89,7 +89,7 @@ trait HasAddresses
     /**
      * @return EloquentCollection<int, Address>
      */
-    public function addressesOfType(AddressType $type): EloquentCollection
+    public function addressesOfType(AddressType|string $type): EloquentCollection
     {
         return $this->addressBook()->ofType($type);
     }

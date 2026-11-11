@@ -8,6 +8,8 @@ use Illuminate\Support\Collection;
 use RoundlyConsulting\Addresses\DataTransferObjects\AddressData;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\IncompleteAddressException;
+use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
+use RoundlyConsulting\Addresses\Support\AddressTypes;
 
 /**
  * Fluent builder produced by `Addresses::for($owner)->new()` and `$model->newAddress()`.
@@ -26,7 +28,7 @@ final class PendingAddress
     private ?string $name = null;
 
     /** Null until `type()` is called: the address then gets `addresses.default_type`. */
-    private ?AddressType $type = null;
+    private AddressType|string|null $type = null;
 
     private bool $isPrimary = false;
 
@@ -40,9 +42,14 @@ final class PendingAddress
         private readonly AddressBook $book,
     ) {}
 
-    public function type(AddressType $type): self
+    /**
+     * A type configured in `addresses.types`: an AddressType case or a type key.
+     *
+     * @throws InvalidAddressTypeException when the type is not configured
+     */
+    public function type(AddressType|string $type): self
     {
-        $this->type = $type;
+        $this->type = AddressTypes::resolve($type);
 
         return $this;
     }

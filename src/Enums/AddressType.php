@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace RoundlyConsulting\Addresses\Enums;
 
+use RoundlyConsulting\Addresses\Support\AddressTypes;
+
 /**
- * The kind of address being stored. Backed by the lowercase string persisted in
- * the `type` column.
+ * The built-in kinds of address. Backed by the lowercase string persisted in the `type`
+ * column. `addresses.types` lists the types an application allows — these six by default —
+ * and may add its own, which are stored and read as plain strings.
  */
 enum AddressType: string
 {
@@ -18,17 +21,11 @@ enum AddressType: string
     case Office = 'office';
 
     /**
-     * A human-friendly label suitable for UI.
+     * A human-friendly label suitable for UI: the one configured in `addresses.types`, else
+     * the `addresses::types.*` translation.
      */
     public function label(): string
     {
-        return match ($this) {
-            self::Default => 'Default',
-            self::Billing => 'Billing',
-            self::Shipping => 'Shipping',
-            self::Home => 'Home',
-            self::Work => 'Work',
-            self::Office => 'Office',
-        };
+        return AddressTypes::label($this);
     }
 }

@@ -8,6 +8,8 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use RoundlyConsulting\Addresses\Address;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Support\AddressModel;
+use RoundlyConsulting\Addresses\Support\AddressTypes;
+use RoundlyConsulting\Addresses\Support\DefaultAddressType;
 
 /**
  * @extends Factory<Address>
@@ -36,7 +38,8 @@ final class AddressFactory extends Factory
             // Plain by default: an owner holds one primary per type, so a batch of random flags
             // would collide. Ask for one with the primary() state.
             'is_primary' => false,
-            'type' => AddressType::Default->value,
+            // `default`, as always — unless the app's `addresses.types` leaves it out.
+            'type' => AddressTypes::allows(AddressType::Default) ? AddressType::Default->value : AddressTypes::key(DefaultAddressType::type()),
             'name' => $this->faker->streetName().' - '.$this->faker->randomElement(['Home', 'Office', 'Work']),
             'city' => $this->faker->city(),
             'street' => $this->faker->streetName(),
@@ -50,9 +53,12 @@ final class AddressFactory extends Factory
         return $this->state(fn (): array => ['is_primary' => true]);
     }
 
-    public function ofType(AddressType $type): static
+    /**
+     * An address of one type: an AddressType case or a type configured in `addresses.types`.
+     */
+    public function ofType(AddressType|string $type): static
     {
-        return $this->state(fn (): array => ['type' => $type->value]);
+        return $this->state(fn (): array => ['type' => AddressTypes::key($type)]);
     }
 
     public function billing(): static

@@ -25,7 +25,7 @@ final class AddressResource extends JsonResource
 
         return [
             'id' => $address->id,
-            'type' => $address->type->value,
+            'type' => $address->typeKey(),
             'name' => $address->name,
             'city' => $address->city,
             'street' => $address->street,

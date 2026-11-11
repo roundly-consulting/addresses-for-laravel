@@ -38,17 +38,20 @@ final readonly class AddressBook
     }
 
     /**
-     * The primary address, optionally of one type.
+     * The primary address, optionally of one type (an AddressType case or a type key).
      */
-    public function primary(?AddressType $type = null): ?Address
+    public function primary(AddressType|string|null $type = null): ?Address
     {
         return $this->addresses->primaryFor($this->addressable, $type);
     }
 
     /**
+     * The addresses of one type (an AddressType case or a type key). Reads are not checked
+     * against `addresses.types`, so rows of a type since dropped from it stay reachable.
+     *
      * @return Collection<int, Address>
      */
-    public function ofType(AddressType $type): Collection
+    public function ofType(AddressType|string $type): Collection
     {
         return $this->addresses->ofTypeFor($this->addressable, $type);
     }

@@ -13,11 +13,13 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use RoundlyConsulting\Addresses\Casts\AddressTypeCast;
 use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Database\Factories\AddressFactory;
 use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Events\AddressDeleted;
 use RoundlyConsulting\Addresses\Events\PrimaryAddressChanged;
+use RoundlyConsulting\Addresses\Support\AddressTypes;
 use RoundlyConsulting\Addresses\Support\PrimaryGroup;
 use RoundlyConsulting\PackageToolkit\Support\Config;
 use RoundlyConsulting\PackageToolkit\Support\RawExpression;
@@ -28,7 +30,7 @@ use Throwable;
  * @property string $addressable_type
  * @property int $addressable_id
  * @property bool $is_primary
- * @property AddressType $type
+ * @property AddressType|string $type an AddressType case for a built-in type, the key for a custom one (see typeKey())
  * @property string|null $name
  * @property string|null $city
  * @property string|null $street
@@ -63,7 +65,8 @@ class Address extends Model
         return [
             'meta' => 'collection',
             'is_primary' => 'bool',
-            'type' => AddressType::class,
+            // Not the enum cast: that throws on a custom type from `addresses.types`.
+            'type' => AddressTypeCast::class,
         ];
     }
 
@@ -244,6 +247,25 @@ class Address extends Model
         ], fn (?string $part): bool => $part !== null && trim($part) !== '');
 
         return implode($separator, $parts);
+    }
+
+    /**
+     * The stored type key — a built-in AddressType value or a custom type — whatever
+     * `$address->type` reads as.
+     */
+    public function typeKey(): string
+    {
+        $type = $this->getAttributes()['type'] ?? null;
+
+        return is_string($type) ? $type : '';
+    }
+
+    /**
+     * The type's display label: configured, translated, or a headline of the key.
+     */
+    public function typeLabel(): string
+    {
+        return AddressTypes::label($this->typeKey());
     }
 
     /**

@@ -79,7 +79,7 @@ final readonly class UpdateAddressAction
         // Leaving the primary flag untouched while it stays in its group means a re-save of
         // the primary is no promotion; moving to another type group (or dropping the flag)
         // demotes first, so the new group never holds two.
-        if (! $data->isPrimary || $address->type !== $data->type) {
+        if (! $data->isPrimary || $address->typeKey() !== $data->typeKey()) {
             $attributes['is_primary'] = false;
         }
 

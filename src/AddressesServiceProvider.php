@@ -9,6 +9,7 @@ use RoundlyConsulting\Addresses\Contracts\CountryResolver;
 use RoundlyConsulting\Addresses\Exceptions\InvalidAddressTypeException;
 use RoundlyConsulting\Addresses\Facades\Addresses;
 use RoundlyConsulting\Addresses\Support\AddressModel;
+use RoundlyConsulting\Addresses\Support\AddressTypes;
 use RoundlyConsulting\Addresses\Support\DefaultAddressType;
 use RoundlyConsulting\PackageToolkit\Concerns\RegistersBlueprintMacros;
 use RoundlyConsulting\PackageToolkit\Exceptions\InvalidConfigurationException;
@@ -26,12 +27,14 @@ final class AddressesServiceProvider extends PackageServiceProvider
             ->name('addresses')
             ->hasConfigFile()
             ->hasMigrations()
+            ->hasTranslations()
             ->hasFacadeAlias(Addresses::class, 'addresses.facade_alias')
             ->contributesToAbout(static fn (): array => [
                 // The resolver is a host class name, so only its base name shows;
                 // no config value here is a credential or a destination.
                 'Model' => self::modelName(),
                 'Table' => 'addresses',
+                'Types' => self::types(),
                 'Default type' => self::defaultType(),
                 'Normalise country' => self::switch('addresses.normalise_country', true),
                 'Country resolver' => self::resolverName(),
@@ -112,8 +115,17 @@ final class AddressesServiceProvider extends PackageServiceProvider
     private static function defaultType(): string
     {
         try {
-            return DefaultAddressType::resolve()->value;
-        } catch (InvalidAddressTypeException) {
+            return AddressTypes::key(DefaultAddressType::type());
+        } catch (InvalidAddressTypeException|InvalidConfigurationException) {
+            return 'INVALID';
+        }
+    }
+
+    private static function types(): string
+    {
+        try {
+            return implode(', ', AddressTypes::keys());
+        } catch (InvalidConfigurationException) {
             return 'INVALID';
         }
     }

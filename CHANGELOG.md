@@ -14,6 +14,35 @@ All notable changes to `addresses-for-laravel` are documented in this file. The 
   `Addresses::for($owner)->setPrimary()` already throws. An update that would move the address to another owner is
   refused too. `Addresses::update()` and `Addresses::delete()` stay unscoped. `Addresses::fake()` records the scoped
   calls for `assertUpdated()` / `assertDeleted()` and refuses the same addresses.
+- Configurable address types: the `addresses.types` config key lists the types an application allows. It ships the six
+  `AddressType` values, so nothing changes until an app sets it; an app can then store its own types
+  (`'types' => ['default', 'billing', 'registered' => 'Registered office', 'postal']`). Every write path takes an
+  `AddressType` case or a type key (`AddressData`, `PendingAddress::type()`, `createAddress()`, `$address->type = …`,
+  `AddressFactory::ofType()`) and refuses a type that is not configured with `InvalidAddressTypeException`; reads
+  (`Addresses::for($owner)->ofType()` / `->primary()`, the `HasAddresses` readers) take a type key too and are not
+  checked, so rows of a type removed from the list stay reachable. `addresses.default_type` may name a custom type.
+- `$address->typeKey()` / `$address->typeLabel()`, `AddressData::typeKey()`, `Addresses::types()` and
+  `Addresses::typeLabel($type)`. A label is the one configured in `addresses.types`, else the new `addresses::types.*`
+  translation (English and Slovak), else a headline of the key (`head_office` → `Head Office`).
+- `Rules\ValidAddressType`, a validation rule that passes exactly the configured types (message in English and Slovak).
+- `DefaultAddressType::type()`, the default type as an `AddressType` case or a custom key.
+- `php artisan about` lists the configured types.
+
+### Changed
+
+- `$address->type` reads as the `AddressType` case for the six built-in keys, as before, and as the stored string for
+  a custom type (the enum cast would throw on it); `toArray()` and `AddressResource` still render the key.
+  `AddressData::$type` is typed `AddressType|string` the same way.
+- `AddressType::label()` reads the `addresses::types.*` translation (and a label configured in `addresses.types`), so
+  it follows the app locale; English output is unchanged.
+- `InvalidAddressTypeException` names the `addresses.types` config key in its message.
+
+### Planned for the next major
+
+- `Address::scopeOfType()` and the `Addressable` contract accept a type key (`AddressType|string`) as well. Today they
+  stay enum-only so existing subclasses and implementations keep compiling; query a custom type with
+  `Addresses::for($owner)->ofType('registered')` or `->where('type', 'registered')`.
+- `DefaultAddressType::resolve()`, which throws for a custom default type, is removed in favour of `type()`.
 
 ## 2.0.0 - 2026-11-07
 

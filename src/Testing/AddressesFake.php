@@ -16,6 +16,7 @@ use RoundlyConsulting\Addresses\Enums\AddressType;
 use RoundlyConsulting\Addresses\Exceptions\AddressOwnershipException;
 use RoundlyConsulting\Addresses\Exceptions\TrashedAddressException;
 use RoundlyConsulting\Addresses\Support\AddressModel;
+use RoundlyConsulting\Addresses\Support\AddressTypes;
 
 /**
  * Test double for the address manager, installed by `Addresses::fake()`. Nothing is
@@ -150,20 +151,20 @@ final class AddressesFake extends AddressManager
      * The first primary in the fake's view — the oldest stored one, then those added
      * through the fake — as the real manager answers it.
      */
-    public function primaryFor(Model $addressable, ?AddressType $type = null): ?Address
+    public function primaryFor(Model $addressable, AddressType|string|null $type = null): ?Address
     {
         return $this->allFor($addressable)->first(
-            fn (Address $address): bool => $address->is_primary && ($type === null || $address->type === $type),
+            fn (Address $address): bool => $address->is_primary && ($type === null || $address->typeKey() === AddressTypes::key($type)),
         );
     }
 
     /**
      * @return Collection<int, Address>
      */
-    public function ofTypeFor(Model $addressable, AddressType $type): Collection
+    public function ofTypeFor(Model $addressable, AddressType|string $type): Collection
     {
         return $this->allFor($addressable)
-            ->filter(fn (Address $address): bool => $address->type === $type)
+            ->filter(fn (Address $address): bool => $address->typeKey() === AddressTypes::key($type))
             ->values();
     }
 
@@ -325,7 +326,7 @@ final class AddressesFake extends AddressManager
 
         $updated = $this->replaced[$this->key($address)] ?? null;
 
-        return $updated instanceof Address ? $row->forceFill(['type' => $updated->type]) : $row;
+        return $updated instanceof Address ? $row->setRawAttributes([...$row->getAttributes(), 'type' => $updated->typeKey()]) : $row;
     }
 
     /**
@@ -364,7 +365,7 @@ final class AddressesFake extends AddressManager
 
     private function group(Address $address): string
     {
-        return $address->addressable_type.':'.((string) $address->addressable_id).'|'.$address->type->value;
+        return $address->addressable_type.':'.((string) $address->addressable_id).'|'.$address->typeKey();
     }
 
     private function key(Address $address): string
