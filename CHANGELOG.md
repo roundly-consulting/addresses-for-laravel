@@ -6,6 +6,8 @@ All notable changes to `addresses-for-laravel` are documented in this file. The 
 
 ## Unreleased
 
+## 2.1.0 - 2026-11-11
+
 ### Added
 
 - `Addresses::for($owner)->update($address, $data)` and `Addresses::for($owner)->delete($address)`: owner-checked
